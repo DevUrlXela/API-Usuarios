@@ -25,7 +25,6 @@ class Rol(models.Model):
         verbose_name_plural = 'roles'
 
 class Usuario(AbstractUser):
-    activo = models.SmallIntegerField(default=0)
     rol = models.ForeignKey(Grupo)
 
 class Registro(models.Model):

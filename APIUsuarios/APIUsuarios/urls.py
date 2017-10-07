@@ -18,7 +18,6 @@ from django.contrib import admin
 from tastypie.api import Api
 
 from api.resources import GrupoResource, RolResource, RegistroResource, UsuarioResource
-
 api_ = Api(api_name="v1")
 api_.register(GrupoResource())
 api_.register(RolResource())
