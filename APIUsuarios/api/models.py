@@ -27,6 +27,9 @@ class Rol(models.Model):
 class Usuario(AbstractUser):
     rol = models.ForeignKey(Grupo)
 
+    def __str__(self):
+        return self.username
+
 class Registro(models.Model):
     entrada = models.DateTimeField()
     salida = models.DateTimeField()
