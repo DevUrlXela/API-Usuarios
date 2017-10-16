@@ -9,14 +9,17 @@ from tastypie.authentication import BasicAuthentication
 from tastypie.exceptions import BadRequest
 from tastypie.http import HttpUnauthorized, HttpForbidden
 from tastypie.utils import trailing_slash
+from tastypie.constants import ALL
 from tastypie import fields
 from datetime import date
 
 from models import Grupo, Registro, Rol, Usuario
 
+'''
 class GrupoResource(ModelResource):
     class Meta:
         queryset = Grupo.objects.all()
+        methods = ['post', 'get']
         authorization = Authorization()
         serializer = Serializer(formats=['json'])
         resource_name = 'grupo'
@@ -28,12 +31,17 @@ class RolResource(ModelResource):
         authorization = Authorization()
         serializer = Serializer(formats=['json'])
         resource_name = 'rol'
+'''
 
 class UsuarioResource(ModelResource):
-    rol = fields.ForeignKey(GrupoResource, 'rol')
+    #rol = fields.ForeignKey(GrupoResource, 'rol')
     class Meta:
         queryset = Usuario.objects.all()
         authorization = Authorization()
+        excludes = ['email', 'password', 'is_active', 'is_staff', 'is_superuser']
+        filtering = {
+            'username': ALL,
+        }
         serializer = Serializer(formats=['json'])
         resource_name = 'user'
 

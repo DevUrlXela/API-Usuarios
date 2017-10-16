@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.models import AbstractUser
 
 # Create your models here.
+'''
 class Grupo(models.Model):
     grupo = models.CharField(max_length=45)
 
@@ -23,17 +24,19 @@ class Rol(models.Model):
     class Meta:
         verbose_name = 'rol'
         verbose_name_plural = 'roles'
+'''
 
 class Usuario(AbstractUser):
-    rol = models.ForeignKey(Grupo)
+    codigo = models.CharField(max_length=6)
+    #rol = models.ForeignKey(Rol)
 
     def __str__(self):
-        return self.username
+        return self.codigo
 
 class Registro(models.Model):
     entrada = models.DateTimeField()
     salida = models.DateTimeField()
-    app = models.IntegerField()
+    app = models.IntegerField(default=0)
     usuario = models.ForeignKey(Usuario)
 
     class Meta:

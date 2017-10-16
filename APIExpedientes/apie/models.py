@@ -2,8 +2,26 @@
 from __future__ import unicode_literals
 
 from django.db import models
+from django.contrib.auth.models import User, AbstractUser
 
 # Create your models here.
+class Rol(models.Model):
+    nombre = models.CharField(max_length=15)
+
+    class Meta:
+        verbose_name = 'rol'
+        verbose_name_plural = 'roles'
+
+    def __str__(self):
+        return self.nombre
+
+class Usuario(AbstractUser):
+    codigo = models.CharField(max_length=6)
+    rol = models.ForeignKey(Rol)
+
+    def __str__(self):
+        return self.codigo
+
 class Expediente(models.Model):
     tipo = models.CharField(max_length=1)
     fecha_entrada = models.DateField(name='Fecha de entrada')
@@ -31,7 +49,7 @@ class Requisito(models.Model):
 class Observacion(models.Model):
     observacion = models.TextField()
     expediente = models.ForeignKey(Expediente)
-    usuario = models.IntegerField()
+    usuario = models.CharField(max_length=6)
 
     class Meta:
         verbose_name = 'observacion'
@@ -42,4 +60,4 @@ class Actualizacion(models.Model):
     fecha_envido = models.DateTimeField(name='Fecha enviado')
     observaciones = models.TextField()
     expediente = models.ForeignKey(Expediente)
-    usuario = models.IntegerField()
+    usuario = models.CharField(max_length=6)

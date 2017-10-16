@@ -79,7 +79,7 @@ WSGI_APPLICATION = 'APIUsuarios.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'drenajes',
+        'NAME': 'api_usuarios',
         'USER': 'user',
         'PASSWORD': '1234',
         'HOST':'localhost',

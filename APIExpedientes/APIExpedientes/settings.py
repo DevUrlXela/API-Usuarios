@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/1.11/ref/settings/
 """
 
 import os
+from django.db import models
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -27,7 +28,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-
+AUTH_USER_MODEL = 'api.Usuario'
 # Application definition
 
 INSTALLED_APPS = [
@@ -78,7 +79,7 @@ WSGI_APPLICATION = 'APIExpedientes.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'drenajes',
+        'NAME': 'api_expedientes',
         'USER': 'user',
         'PASSWORD': '1234',
         'HOST':'localhost',

@@ -19,7 +19,7 @@ from tastypie.api import Api
 
 from apie.resources import ExpedienteResource, RequisitoResource, ObservacionResource, ActualizacionResource
 
-api_ = Api(api_name="v1")
+api_ = Api(api_name="expedientes")
 api_.register(ExpedienteResource())
 api_.register(RequisitoResource())
 api_.register(ObservacionResource())
