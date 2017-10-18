@@ -25,7 +25,6 @@ class Rol(models.Model):
         verbose_name = 'rol'
         verbose_name_plural = 'roles'
 '''
-
 class Usuario(AbstractUser):
     codigo = models.CharField(max_length=6)
     #rol = models.ForeignKey(Rol)

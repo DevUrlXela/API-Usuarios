@@ -17,10 +17,10 @@ from django.conf.urls import url, include
 from django.contrib import admin
 from tastypie.api import Api
 
-from api.resources import GrupoResource, RolResource, RegistroResource, UsuarioResource
+from api.resources import RegistroResource, UsuarioResource
 api_ = Api(api_name="usuarios")
-api_.register(GrupoResource())
-api_.register(RolResource())
+#api_.register(GrupoResource())
+#api_.register(RolResource())
 api_.register(RegistroResource())
 api_.register(UsuarioResource())
 
