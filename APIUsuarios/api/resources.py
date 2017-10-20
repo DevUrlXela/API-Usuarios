@@ -12,11 +12,16 @@ from tastypie.http import HttpUnauthorized, HttpForbidden
 from tastypie.utils import trailing_slash
 from tastypie.constants import ALL
 from tastypie.models import ApiKey, create_api_key
+from tastypie.api import Api
 from tastypie import fields
+
+from oauth2_provider.models import AccessToken, Application
 from datetime import date
 
 from models import Registro, Usuario
+from authentication import (OAuth20Authentication, OAuth2ScopedAuthentication)
 
+import datetime
 '''
 class GrupoResource(ModelResource):
     class Meta:
@@ -53,6 +58,40 @@ class UsuarioResource(ModelResource):
             bundle = super(UsuarioResource, self).obj_create(bundle)
             bundle.obj.set_password(bundle.data.get('password'))
             bundle.obj.save()
+            self.user = Usuario.objects.get(codigo=bundle.data.get('codigo'))
+
+            self.scopes = ("read", "write", "read write")
+            for scope in self.scopes:
+                scope_attrbute_name = "token_" + scope.replace(" ", "_")
+                setattr(self, scope_attrbute_name, "TOKEN" + scope)
+            self.token = 'TOKEN'
+            self.scoped_token = self.token_read_write
+
+            ot_application = Application(
+                user = self.user,
+                redirect_uris = 'https://127.0.0.1:8000',
+                client_type = Application.CLIENT_CONFIDENTIAL,
+                authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
+                name = 'connection'
+            )
+            ot_application.save()
+
+            for scope in self.scopes + (None,):
+                options = {
+                    'user': self.user,
+                    'application': ot_application,
+                    'expires': datetime.datetime.now() + datetime.timedelta(days=10),
+                    'token': self.token
+                }
+                if scope:
+                    scope_attrbute_name = "token_" + scope.replace(" ", "_")
+                    options.update({
+                        'scope': scope,
+                        'token': getattr(self, scope_attrbute_name)
+                    })
+                ot_access_token = AccessToken(**options)
+                ot_access_token.save()
+
         except IntegrityError:
             raise BadRequest('El usuario ya existe')
 
@@ -106,6 +145,6 @@ class RegistroResource(ModelResource):
     class Meta:
         queryset = Registro.objects.all()
         authorization = Authorization()
-        authentication = ApiKeyAuthentication()
+        authentication = OAuth20Authentication()
         serializer = Serializer(formats=['json'])
         resource_name = 'reg'

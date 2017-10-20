@@ -5,7 +5,7 @@ from django.conf.urls import url
 from tastypie.resources import ModelResource, Resource, ALL
 from tastypie.serializers import Serializer
 from tastypie.authorization import DjangoAuthorization, ReadOnlyAuthorization, Authorization
-from tastypie.authentication import BasicAuthentication
+from tastypie.authentication import BasicAuthentication, ApiKeyAuthentication
 from tastypie.exceptions import BadRequest
 from tastypie.http import HttpUnauthorized, HttpForbidden
 from tastypie.utils import trailing_slash
