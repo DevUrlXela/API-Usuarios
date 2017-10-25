@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta
 
 from models import Expediente, Requisito, Observacion, Actualizacion, Usuario, Rol, Estado
 from authentication import (OAuth20Authentication, OAuth2ScopedAuthentication)
+from tools import codigo, generar_clave
 
 class RolResource(ModelResource):
     class Meta:
@@ -46,9 +47,12 @@ class UsuarioResource(ModelResource):
         bundle = super(UsuarioResource, self).obj_create(bundle)
         bundle.obj.set_password(bundle.data.get('password'))
         bundle.obj.save()
+        
         self.user = Usuario.objects.get(codigo=bundle.data.get('codigo'))
+        self.user.email = bundle.data.get('email')
+        self.user.save()
 
-        self.token = 'TOKEN' + self.user.__str__()
+        self.token = generar_clave(self)
 
         ot_application = Application(
             user = self.user,
@@ -128,6 +132,9 @@ class ExpedienteResource(ModelResource):
             url(r"^(?P<resource_name>%s)/(?P<token>[-\w]+)/crear%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('crear'), name="crear"),
+            url(r"^(?P<resource_name>%s)/(?P<token>[-\w]+)/informacion/(?P<id>[\d]+)%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('informacion'), name="informacion"),
             url(r'^(?P<resource_name>%s)/(?P<token>[-\w]+)/leido%s$' %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('leido'), name='api_leido'),
@@ -140,14 +147,20 @@ class ExpedienteResource(ModelResource):
         tipo = data.get('tipo', '')
         fecha_entrada = date.today()
         remitente = data.get('remitente', '')
-        folio = data.get('folio', '')
+        folio = data.get('numero_folios', '')
         firma = data.get('firma', '')
         usuario = data.get('usuario', '')
 
         us = Usuario.objects.get(id=usuario)
-        exp = Expediente(tipo=tipo, fecha_entrada=fecha_entrada, remitente=remitente, folio=folio, firma=firma, usuario=us)
+        exp = Expediente(tipo=tipo, fecha_entrada=fecha_entrada, remitente=remitente, numero_folios=folio, firma=firma, usuario=us)
         exp.save()
         return self.create_response(request, {"success":True}, HttpCreated)
+
+    def informacion(self, request, id, **kwargs):
+        self.method_check(request, allowed=['get'])
+
+        expediente = Expediente.objects.get(id=id)
+        return self.create_response(request, {"success":True, "expediente":expediente})
 
     def noLeidos(self, request, token, **kwargs):
         self.method_check(request, allowed=['get'])
@@ -185,15 +198,24 @@ class RequisitoResource(ModelResource):
         authorization = Authorization()
         authentication = OAuth20Authentication()
         serializer = Serializer(formats=['json'])
+        filtering = {
+            'id': ALL,
+            'expediente': ALL,
+        }
         resource_name = 'requisito'
 
 class ObservacionResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')
+    usuario = fields.ForeignKey(UsuarioResource, 'usuario')
     class Meta:
         queryset = Observacion.objects.all()
         authorization = Authorization()
         authentication = OAuth20Authentication()
         serializer = Serializer(formats=['json'])
+        filtering = {
+            'id': ALL,
+            'expediente': ALL,
+        }
         resource_name = 'observacion'
 
 class ActualizacionResource(ModelResource):
@@ -212,6 +234,10 @@ class EstadoResource(ModelResource):
         authorization = Authorization()
         authentication = OAuth20Authentication()
         serializer = Serializer(formats=['json'])
+        filtering = {
+            'id': ALL,
+            'expediente': ALL,
+        }
         resource_name = 'estado'
 
     def prepend_urls(self):
