@@ -27,4 +27,12 @@ class Generador ():
         return clave
 
     def codigo(self,id):
-        return "EXP" + str(id)
+        cod = ""
+
+        if id < 10:
+            cod = "EXP00"+ str(id)
+        elif id < 100:
+            cod = "EXP0" + str(id)
+        else:
+            cod = "EXP" + str(id)
+        return cod
