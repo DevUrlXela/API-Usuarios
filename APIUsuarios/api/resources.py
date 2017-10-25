@@ -6,12 +6,11 @@ from django.conf.urls import url
 from tastypie.resources import ModelResource, Resource
 from tastypie.serializers import Serializer
 from tastypie.authorization import DjangoAuthorization, ReadOnlyAuthorization, Authorization
-from tastypie.authentication import BasicAuthentication, ApiKeyAuthentication
+from tastypie.authentication import BasicAuthentication
 from tastypie.exceptions import BadRequest
 from tastypie.http import HttpUnauthorized, HttpForbidden
 from tastypie.utils import trailing_slash
 from tastypie.constants import ALL
-from tastypie.models import ApiKey, create_api_key
 from tastypie.api import Api
 from tastypie import fields
 
@@ -39,13 +38,13 @@ class RolResource(ModelResource):
         serializer = Serializer(formats=['json'])
         resource_name = 'rol'
 '''
-signals.post_save.connect(create_api_key, sender=Usuario)
+#signals.post_save.connect(create_api_key, sender=Usuario)
 class UsuarioResource(ModelResource):
     #rol = fields.ForeignKey(GrupoResource, 'rol')
     class Meta:
         queryset = Usuario.objects.all()
         authorization = Authorization()
-        #authentication = ApiKeyAuthentication()
+        #authentication = OAuth20Authentication()
         excludes = ['email', 'password', 'is_active', 'is_staff', 'is_superuser']
         filtering = {
             'username': ALL,
@@ -54,46 +53,31 @@ class UsuarioResource(ModelResource):
         resource_name = 'user'
 
     def obj_create(self, bundle, request=None, **kwargs):
-        try:
-            bundle = super(UsuarioResource, self).obj_create(bundle)
-            bundle.obj.set_password(bundle.data.get('password'))
-            bundle.obj.save()
-            self.user = Usuario.objects.get(codigo=bundle.data.get('codigo'))
+        bundle = super(UsuarioResource, self).obj_create(bundle)
+        bundle.obj.set_password(bundle.data.get('password'))
+        bundle.obj.save()
+        self.user = Usuario.objects.get(codigo=bundle.data.get('codigo'))
 
-            self.scopes = ("read", "write", "read write")
-            for scope in self.scopes:
-                scope_attrbute_name = "token_" + scope.replace(" ", "_")
-                setattr(self, scope_attrbute_name, "TOKEN" + scope)
-            self.token = 'TOKEN'
-            self.scoped_token = self.token_read_write
+        self.token = 'TOKEN ' + self.user.__str__()
 
-            ot_application = Application(
-                user = self.user,
-                redirect_uris = 'https://127.0.0.1:8000',
-                client_type = Application.CLIENT_CONFIDENTIAL,
-                authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
-                name = 'connection'
-            )
-            ot_application.save()
+        ot_application = Application(
+            user = self.user,
+            redirect_uris = 'https://127.0.0.1:8000',
+            client_type = Application.CLIENT_CONFIDENTIAL,
+            authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
+            name = 'app ' + self.user.__str__()
+        )
+        ot_application.save()
 
-            for scope in self.scopes + (None,):
-                options = {
-                    'user': self.user,
-                    'application': ot_application,
-                    'expires': datetime.datetime.now() + datetime.timedelta(days=10),
-                    'token': self.token
-                }
-                if scope:
-                    scope_attrbute_name = "token_" + scope.replace(" ", "_")
-                    options.update({
-                        'scope': scope,
-                        'token': getattr(self, scope_attrbute_name)
-                    })
-                ot_access_token = AccessToken(**options)
-                ot_access_token.save()
+        options = {
+            'user': self.user,
+            'application': ot_application,
+            'expires': datetime.datetime.now() + datetime.timedelta(days=10),
+            'token': self.token
+        }
 
-        except IntegrityError:
-            raise BadRequest('El usuario ya existe')
+        ot_access_token = AccessToken(**options)
+        ot_access_token.save()
 
         return bundle
 
@@ -119,16 +103,9 @@ class UsuarioResource(ModelResource):
         if user:
             if user.is_active:
                 login(request, user)
-
-                try:
-                    key = ApiKey.objects.get(user=user)
-                except ApiKey.DoesNotExist:
-                    return self.create_response(request, {'success': False, 'reason': 'missing key',}, HttpForbidden)
-
-                ret = self.create_response(request, {'success': True, 'user': user, 'key':key.key})
-                return ret
+                return self.create_response(request, {'success': True, 'user': user})
             else:
-                return self.create_response(request, {'success': False, 'reason': 'disabled',}, HttpForbidden)
+                return self.create_response(request, {'success': False, 'reason': 'baneado',}, HttpForbidden)
         else:
             return self.create_response(request, {'success': False, 'reason': 'incorrect', 'skip_login_redir':True}, HttpUnauthorized)
 

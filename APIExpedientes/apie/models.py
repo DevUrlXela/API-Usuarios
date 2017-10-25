@@ -24,11 +24,15 @@ class Usuario(AbstractUser):
 
 class Expediente(models.Model):
     tipo = models.CharField(max_length=1)
-    fecha_entrada = models.DateField(name='Fecha de entrada')
-    fecha_finalizacion = models.DateField(name='Fecha de finalizacion')
+    fecha_entrada = models.DateField()
+    fecha_finalizacion = models.DateField(default=None)
     remitente = models.CharField(max_length=100)
     numero_folios = models.CharField(max_length=10)
     completado = models.SmallIntegerField(default=0)
+    leido = models.SmallIntegerField(default=0)
+    firma = models.CharField(max_length=15)
+    aceptado = models.SmallIntegerField(default=0)
+    usuario = models.ForeignKey(Usuario)
 
     class Meta:
         verbose_name = 'expediente'
@@ -49,15 +53,23 @@ class Requisito(models.Model):
 class Observacion(models.Model):
     observacion = models.TextField()
     expediente = models.ForeignKey(Expediente)
-    usuario = models.CharField(max_length=6)
+    usuario = models.ForeignKey(Usuario)
 
     class Meta:
         verbose_name = 'observacion'
         verbose_name_plural = 'observaciones'
 
 class Actualizacion(models.Model):
-    fecha_recibido = models.DateTimeField(name='Fecha de recibido')
-    fecha_envido = models.DateTimeField(name='Fecha enviado')
+    fecha_recibido = models.DateTimeField()
+    fecha_envio = models.DateTimeField()
     observaciones = models.TextField()
     expediente = models.ForeignKey(Expediente)
-    usuario = models.CharField(max_length=6)
+    usuario = models.ForeignKey(Usuario)
+
+class Estado(models.Model):
+    estado = models.CharField(max_length=10)
+    fecha = models.DateField(auto_now=False)
+    expediente = models.ForeignKey(Expediente)
+
+    def __str__(self):
+        return self.estado

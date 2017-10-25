@@ -17,15 +17,19 @@ from django.conf.urls import url, include
 from django.contrib import admin
 from tastypie.api import Api
 
-from apie.resources import ExpedienteResource, RequisitoResource, ObservacionResource, ActualizacionResource
+from apie.resources import ExpedienteResource, RequisitoResource, ObservacionResource, ActualizacionResource, UsuarioResource, RolResource, EstadoResource
 
 api_ = Api(api_name="expedientes")
 api_.register(ExpedienteResource())
 api_.register(RequisitoResource())
 api_.register(ObservacionResource())
 api_.register(ActualizacionResource())
+api_.register(UsuarioResource())
+api_.register(RolResource())
+api_.register(EstadoResource())
 
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^', include(api_.urls)),
+    url(r'^o/', include('oauth2_provider.urls', namespace='oauth2_provider')),
 ]
