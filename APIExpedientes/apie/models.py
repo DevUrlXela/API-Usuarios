@@ -24,8 +24,8 @@ class Usuario(AbstractUser):
 
 class Expediente(models.Model):
     tipo = models.CharField(max_length=1)
-    fecha_entrada = models.DateField()
-    fecha_finalizacion = models.DateField(default=None)
+    fecha_entrada = models.DateField(auto_now=True)
+    fecha_finalizacion = models.DateField(null=True)
     remitente = models.CharField(max_length=100)
     numero_folios = models.CharField(max_length=10)
     completado = models.SmallIntegerField(default=0)

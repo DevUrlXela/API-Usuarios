@@ -2,13 +2,14 @@ from django.db import IntegrityError
 from django.contrib.auth import authenticate, login, logout
 from django.conf.urls import url
 from django.db.models import Q
+from django.core import serializers
 
 from tastypie.resources import ModelResource, Resource, ALL
 from tastypie.serializers import Serializer
 from tastypie.authorization import DjangoAuthorization, ReadOnlyAuthorization, Authorization
 from tastypie.authentication import BasicAuthentication
 from tastypie.exceptions import BadRequest
-from tastypie.http import HttpUnauthorized, HttpForbidden, HttpCreated
+from tastypie.http import HttpUnauthorized, HttpForbidden, HttpCreated, HttpResponse
 from tastypie.utils import trailing_slash
 from tastypie.constants import ALL
 from tastypie.api import Api
@@ -17,6 +18,7 @@ from tastypie import fields
 from oauth2_provider.models import AccessToken, Application
 
 from datetime import date, datetime, timedelta
+import json
 
 from models import Expediente, Requisito, Observacion, Actualizacion, Usuario, Rol, Estado
 from authentication import (OAuth20Authentication, OAuth2ScopedAuthentication)
@@ -26,7 +28,7 @@ class RolResource(ModelResource):
     class Meta:
         queryset = Rol.objects.all()
         authorization = Authorization()
-        #authentication = OAuth20Authentication()
+        authentication = OAuth20Authentication()
         serializer = Serializer(formats=['json'])
         resource_name = 'rol'
 
@@ -47,7 +49,7 @@ class UsuarioResource(ModelResource):
         bundle = super(UsuarioResource, self).obj_create(bundle)
         bundle.obj.set_password(bundle.data.get('password'))
         bundle.obj.save()
-        
+
         self.user = Usuario.objects.get(codigo=bundle.data.get('codigo'))
         self.user.email = bundle.data.get('email')
         self.user.save()
@@ -98,6 +100,21 @@ class UsuarioResource(ModelResource):
             if user.is_active:
                 login(request, user)
                 token = AccessToken.objects.get(user=user)
+                '''
+                token = generar_clave(self)
+                application = Application.objects.get(user=user)
+
+                options = {
+                    'user': user,
+                    'application': application,
+                    'expires': datetime.now() + timedelta(minutes=30),
+                    'token': token
+                }
+
+                access_token = AccessToken(**options)
+                access_token.save()
+                '''
+
                 return self.create_response(request, {'success': True, 'user': user.id, 'rol':user.rol, 'token':token})
             else:
                 return self.create_response(request, {'success': False, 'reason': 'baneado',}, HttpForbidden)
@@ -106,6 +123,8 @@ class UsuarioResource(ModelResource):
 
     def logout(self, request, **kwargs):
         self.method_check(request, allowed=['get'])
+        access_token = AccessToken.objects.get(token=token)
+
         if request.user and request.user.is_authenticated():
             logout(request)
             return self.create_response(request, {'success': True})
@@ -122,26 +141,41 @@ class ExpedienteResource(ModelResource):
         resource_name = 'expediente'
         filtering = {
             'id': ALL,
+            'tipo': ALL,
+            'remitente': ALL,
+            'firma': ALL,
+            'usuario': ALL,
         }
 
     def prepend_urls(self):
         return [
-            url(r"^(?P<resource_name>%s)/(?P<token>[-\w]+)/noLeidos%s$" %
+            url(r"^(?P<resource_name>%s)/noleidos%s$" %
                 (self._meta.resource_name, trailing_slash()),
-                self.wrap_view('noLeidos'), name="api_noLeidos"),
-            url(r"^(?P<resource_name>%s)/(?P<token>[-\w]+)/crear%s$" %
+                self.wrap_view('no_leidos'), name="expediente_noleidos"),
+            url(r"^(?P<resource_name>%s)/crear%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('crear'), name="crear"),
-            url(r"^(?P<resource_name>%s)/(?P<token>[-\w]+)/informacion/(?P<id>[\d]+)%s$" %
+            url(r"^(?P<resource_name>%s)/informacion/(?P<id>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
-                self.wrap_view('informacion'), name="informacion"),
-            url(r'^(?P<resource_name>%s)/(?P<token>[-\w]+)/leido%s$' %
+                self.wrap_view('informacion'), name="expediente_informacion"),
+            url(r"^(?P<resource_name>%s)/finalizados%s$" %
                 (self._meta.resource_name, trailing_slash()),
-                self.wrap_view('leido'), name='api_leido'),
+                self.wrap_view('lista_finalizados'), name="expediente_finalizados"),
+            url(r"^(?P<resource_name>%s)/trasferidos%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('lista_trasferidos'), name="expediente_trasferidos"),
+            url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/leido%s$' %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('leido'), name='expediente_leido'),
+            url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/autorizar%s$' %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('autorizado'), name='expediente_autorizado'),
         ]
 
     def crear(self, request, **kwargs):
         self.method_check(request, allowed=['post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
         data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
         tipo = data.get('tipo', '')
@@ -157,37 +191,62 @@ class ExpedienteResource(ModelResource):
         return self.create_response(request, {"success":True}, HttpCreated)
 
     def informacion(self, request, id, **kwargs):
-        self.method_check(request, allowed=['get'])
+        self.method_check(request, allowed=['get', 'post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
 
-        expediente = Expediente.objects.get(id=id)
-        return self.create_response(request, {"success":True, "expediente":expediente})
+        exp = Expediente.objects.get(id=id)
+        return self.create_response(request, { "success":True, "tipo":exp.tipo, "fecha_entrada": exp.fecha_entrada, "fecha_finalizacion": exp.fecha_finalizacion,
+                                               "remitente": exp.remitente, "numero_folios": exp.numero_folios, "completado": exp.completado, "leido": exp.leido,
+                                               "firma": exp.firma, "aceptado": exp.aceptado, "usuario": exp.usuario.id})
 
-    def noLeidos(self, request, token, **kwargs):
-        self.method_check(request, allowed=['get'])
+    def lista_finalizados(self, request, **kwargs):
+        self.method_check(request, allowed=['get', 'post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        data = serializers.serialize("json", Expediente.objects.filter(Q(usuario=request.user), Q(completado=1)))
+
+        return HttpResponse(data, content_type='application/json', status=200)
+
+    def lista_trasferidos(self,request, **kwargs):
+        self.method_check(request, allowed=['get', 'post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        data = serializers.serialize("json", Actualizacion.objects.filter(usuario=request.user))
+
+        return HttpResponse(data, content_type='application/json', status=200)
+
+    def no_leidos(self, request, **kwargs):
+        self.method_check(request, allowed=['get', 'post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
         expediente = Expediente.objects.filter(Q(usuario=request.user), Q(leido=0)).count()
+
         return self.create_response(request, {'numero': expediente})
 
-    def leido(self, request, token, **kwargs):
-        self.method_check(request, allowed=['put'])
-        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+    def leido(self, request, id, **kwargs):
+        self.method_check(request, allowed=['post', 'get'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        #data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
-        exp = data.get('id', '')
-        expediente = Expediente.objects.get(id=exp)
+        #exp = data.get('id', '')
+        expediente = Expediente.objects.get(id=id)
         expediente.leido = 1
         expediente.save()
 
-        return self.create_response(request, {"success":True}, HttpCreated)
+        return self.create_response(request, { "success": True}, HttpCreated)
 
-    def autorizado(self, request, token, **kwargs):
-        self.method_check(request, allowed=['put'])
-        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+    def autorizado(self, request, id, **kwargs):
+        self.method_check(request, allowed=['put', 'get'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        #data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
-        exp = data.get('id', '')
-        expediente = Expediente.objects.get(id=exp)
+        #exp = data.get('id', '')
+        expediente = Expediente.objects.get(id=id)
         expediente.aceptado = 1
         expediente.save()
-
-
 
         return self.create_response(request, {"success":True}, HttpCreated)
 
@@ -204,6 +263,61 @@ class RequisitoResource(ModelResource):
         }
         resource_name = 'requisito'
 
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/expediente/(?P<id>[\d]+)/crear%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('crear'), name="requisto_crear"),
+            url(r"^(?P<resource_name>%s)/expediente/(?P<id>[\d]+)/informacion%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('informacion'), name="requisito_informacion"),
+            url(r"^(?P<resource_name>%s)/expediente/(?P<ide>[\d]+)/editar/(?P<idr>[\d]+)%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('editar'), name="requisto_editar"),
+            url(r"^(?P<resource_name>%s)/finalizados%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('lista_finalizados'), name="requisito_cumplido"),
+        ]
+
+    def crear(self, request, id, **kwargs):
+        self.method_check(request, allowed=['post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        requisito = data.get('requisito', ' ')
+        expediente = Expediente.objects.get(id=id)
+
+        requisito = Requisito(requisito=requisito, expediente=expediente)
+        requisito.save()
+
+        return self.create_response(request, { "success": True}, HttpCreated)
+
+    def informacion(self, request, id, **kwargs):
+        self.method_check(request, allowed=['get', 'post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+
+        expediente = Expediente.objects.filter(id=id)
+        data = serializers.serialize("json", Requisito.objects.filter(expediente=expediente))
+
+        return HttpResponse(data, content_type='application/json', status=200)
+
+        #return self.create_response(request, {"success": True, "requisito": req.requisito, "cumplido":req.cumplido, "expediente": req.expediente.id })
+
+    def editar(self, request, ide, idr, **kwargs):
+        self.method_check(request, allowed=['put'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        req = Requisito.objects.get(id=idr)
+        req.requisito = data.get('requisito', ' ')
+        req.cumplido = data.get('cumplido', ' ')
+        req.save()
+
+        return self.create_response(request, { "success": True}, HttpCreated)
+
 class ObservacionResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')
     usuario = fields.ForeignKey(UsuarioResource, 'usuario')
@@ -218,13 +332,54 @@ class ObservacionResource(ModelResource):
         }
         resource_name = 'observacion'
 
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/expediente/(?P<id>[\d]+)/crear%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('crear'), name="observacion_crear"),
+            url(r"^(?P<resource_name>%s)/expediente/(?P<id>[\d]+)/informacion%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('informacion'), name="observacion_informacion"),
+        ]
+
+    def crear(self, request, id, **kwargs):
+        self.method_check(request, allowed=['post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        token = data.get('token', ' ')
+        obs = data.get('observacion', ' ')
+        at = AccessToken.objects.get(token=token)
+        expediente = Expediente.objects.get(id=id)
+
+        observacion = Observacion(observacion=obs, expediente=expediente, usuario=at.user)
+        observacion.save()
+
+        return self.create_response(request, { "success": True}, HttpCreated)
+
+    def informacion(self, request, id, **kwargs):
+        self.method_check(request, allowed=['post', 'get'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+
+        expediente = Expediente.objects.filter(id=id)
+        data = serializers.serialize("json", Observacion.objects.filter(expediente=expediente))
+
+        return HttpResponse(data, content_type='application/json', status=200)
+
 class ActualizacionResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')
+    usuario = fields.ForeignKey(UsuarioResource, 'usuario')
     class Meta:
         queryset = Actualizacion.objects.all()
         authorization = Authorization()
         authentication = OAuth20Authentication()
         serializer = Serializer(formats=['json'])
+        filtering = {
+            'id': ALL,
+            'expediente': ALL,
+        }
         resource_name = 'actualizacion'
 
 class EstadoResource(ModelResource):

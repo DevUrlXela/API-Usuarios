@@ -43,7 +43,6 @@ class OAuth20Authentication(Authentication):
         log.info("OAuth20Authentication")
         try:
             key = request.GET.get('oauth_consumer_key')
-            print key
             if not key:
                 for header in ['Authorization', 'HTTP_AUTHORIZATION']:
                     auth_header_value = request.META.get(header)
@@ -54,7 +53,6 @@ class OAuth20Authentication(Authentication):
                 if request.META.get('CONTENT_TYPE') == 'application/json':
                     decoded_body = request.body.decode('utf8')
                     key = json.loads(decoded_body)['oauth_consumer_key']
-                    print key
             if not key:
                 log.info('OAuth20Authentication. No consumer_key found.')
                 return None
@@ -62,7 +60,6 @@ class OAuth20Authentication(Authentication):
             If verify_access_token() does not pass, it will raise an error
             """
             token = self.verify_access_token(key, request, **kwargs)
-            print token
 
             # If OAuth authentication is successful, set the request user to
             # the token user for authorization
