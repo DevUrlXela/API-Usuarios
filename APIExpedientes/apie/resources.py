@@ -170,6 +170,9 @@ class ExpedienteResource(ModelResource):
             url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/autorizar%s$' %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('autorizado'), name='expediente_autorizado'),
+            url(r"^(?P<resource_name>%s)/busqueda/(?P<id>[\d]+)%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('busqueda_rapida'), name="expediente_busqueda_rapida"),
         ]
 
     def crear(self, request, **kwargs):
@@ -249,6 +252,16 @@ class ExpedienteResource(ModelResource):
         expediente.save()
 
         return self.create_response(request, {"success":True}, HttpCreated)
+
+    def busqueda_rapida(self, request, id, **kwargs):
+        self.method_check(request, allowed=['get', 'post'])
+        self.is_authenticated(request)
+
+        exp = Expediente.objects.get(id=id)
+        est = Estado.objects.get(expediente=exp)
+
+        return self.create_response(request, { "estado": est.estado, "tipo": exp.tipo, "remitente": exp.remitente,
+                                               "fecha_ingreso": exp.fecha_entrada, "firma": exp.firma})
 
 class RequisitoResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')
