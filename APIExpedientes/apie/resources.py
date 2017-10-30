@@ -382,6 +382,64 @@ class ActualizacionResource(ModelResource):
         }
         resource_name = 'actualizacion'
 
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/expediente/(?P<id>[\d]+)/crear%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('crear'), name="actualizacion_crear"),
+            url(r"^(?P<resource_name>%s)/expediente/(?P<id>[\d]+)/transferencias%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('informacion'), name="actualizacion_informacion"),
+            url(r"^(?P<resource_name>%s)/expediente/(?P<ide>[\d]+)/editar/(?P<ida>[\d]+)%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('editar'), name="actualizacion_editar"),
+        ]
+
+    def crear(self, request, id, **kwargs):
+        self.method_check(request, allowed=['post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        token = data.get('token', ' ')
+        fecha_recibido = data.get('fecha_recibido', ' ')
+        fecha_envio = data.get('fecha_envio', ' ')
+        obs = data.get('observaciones', ' ')
+        at = AccessToken.objects.get(token=token)
+        expediente = Expediente.objects.get(id=id)
+
+        observacion = Observacion(fecha_recibido=fecha_recibido, fecha_envio=fecha_envio, observaciones=obs, expediente=expediente, usuario=at.user)
+        observacion.save()
+
+        return self.create_response(request, { "success": True}, HttpCreated)
+
+    def informacion(self, request, id, **kwargs):
+        self.method_check(request, allowed=['get', 'post'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+
+        expediente = Expediente.objects.filter(id=id)
+        data = serializers.serialize("json", Actualizacion.objects.filter(expediente=expediente).values())
+
+        return HttpResponse(data, content_type='application/json', status=200)
+
+        #return self.create_response(request, {"success": True, "requisito": req.requisito, "cumplido":req.cumplido, "expediente": req.expediente.id })
+
+    def editar(self, request, ide, ida, **kwargs):
+        self.method_check(request, allowed=['put'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        act = Actualizacion.objects.get(id=ida)
+        act.fecha_recibido = data.get('fecha_recibido', ' ')
+        act.fecha_envio = data.get('fecha_envio', ' ')
+        act.observaciones = data.get('observaciones', ' ')
+        act.save()
+
+        return self.create_response(request, { "success": True}, HttpCreated)
+
+
 class EstadoResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')
     class Meta:
@@ -397,30 +455,34 @@ class EstadoResource(ModelResource):
 
     def prepend_urls(self):
         return [
-            url(r"^(?P<resource_name>%s)/(?P<token>[-\w]+)/crear%s$" %
+            url(r"^(?P<resource_name>%s)/expediente/(?P<id>[\d]+)/crear%s$" %
                 (self._meta.resource_name, trailing_slash()),
-                self.wrap_view('crear'), name="est_crear"),
-            url(r"^(?P<resource_name>%s)/(?P<token>[-\w]+)/expediente/(?P<id>[\d]+)%s$" %
+                self.wrap_view('crear'), name="estado_crear"),
+            url(r"^(?P<resource_name>%s)/expediente/(?P<id>[\d]+)/estados%s$" %
                 (self._meta.resource_name, trailing_slash()),
-                self.wrap_view('estado_expediente'), name="estado_expediente"),
+                self.wrap_view('informacion'), name="estado_informacion"),
         ]
 
-    def crear(self, request, **kwargs):
+    def crear(self, request, id, **kwargs):
         self.method_check(request, allowed=['post'])
+        self.is_authenticated(request)
         data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
         estado = data.get('estado', '')
         fecha = date.today()
-        id_exp = data.get('expediente', '')
-        expediente = Expediente.objects.get(id=id_exp)
+        expediente = Expediente.objects.get(id=id)
 
         crear = Estado(estado=estado, fecha=fecha, expediente=expediente)
         crear.save()
 
-        return self.create_response(request, {"success":True}, HttpCreated)
+        return self.create_response(request, {"success": True}, HttpCreated)
 
-    def estado_expediente(self, request, id, **kwargs):
-        self.method_check(request, allowed=['get'])
-        estado = Estado.objects.get(id=id)
+    def informacion(self, request, id, **kwargs):
+        self.method_check(request, allowed=['post', 'get'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
 
-        return self.create_response(request, {"success":True, "estado":estado})
+        expediente = Expediente.objects.filter(id=id)
+        data = serializers.serialize("json", Estado.objects.filter(expediente=expediente))
+
+        return HttpResponse(data, content_type='application/json', status=200)
