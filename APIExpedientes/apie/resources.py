@@ -32,6 +32,27 @@ class RolResource(ModelResource):
         serializer = Serializer(formats=['json'])
         resource_name = 'rol'
 
+    def prepend_urls(self):
+        return [
+            url(r"^(?P<resource_name>%s)/usuarios%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('informacion'), name="rol_informacion"),
+        ]
+
+    def informacion(self, request, **kwargs):
+        self.method_check(request, allowed=['post', 'get'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+
+        usuarios = Usuario.objects.all()
+        bundle = self.build_bundle(obj=usuarios, request=request)
+        bundle = self.full_dehydrate(bundle)
+        bundle = self.alter_detail_data_to_serialize(request, bundle)
+        #all_objects = list(Usuario.objects.all()) + list(Rol.objects.all())
+        #data = Serializer.serialize(Usuario.objects.all(), format='application/json', options=None)
+
+        return HttpResponse(request, bundle)
+
 class UsuarioResource(ModelResource):
     rol = fields.ForeignKey(RolResource, 'rol')
     class Meta:
@@ -169,7 +190,10 @@ class ExpedienteResource(ModelResource):
                 self.wrap_view('leido'), name='expediente_leido'),
             url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/autorizar%s$' %
                 (self._meta.resource_name, trailing_slash()),
-                self.wrap_view('autorizado'), name='expediente_autorizado'),
+                self.wrap_view('autorizar'), name='expediente_autorizar'),
+            url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/aceptar%s$' %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('aceptar'), name='expediente_aceptar'),
             url(r"^(?P<resource_name>%s)/busqueda/(?P<id>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('busqueda_rapida'), name="expediente_busqueda_rapida"),
@@ -189,8 +213,12 @@ class ExpedienteResource(ModelResource):
         usuario = data.get('usuario', '')
 
         us = Usuario.objects.get(id=usuario)
-        exp = Expediente(tipo=tipo, fecha_entrada=fecha_entrada, remitente=remitente, numero_folios=folio, firma=firma, usuario=us)
+        exp = Expediente(tipo=tipo, fecha_entrada=fecha_entrada, remitente=remitente, numero_folios=folio, firma=firma, usuario=usuario)
         exp.save()
+
+        est = Estado(estado="En espera", fecha= date.today(), expediente=exp)
+        est.save()
+
         return self.create_response(request, {"success":True}, HttpCreated)
 
     def informacion(self, request, id, **kwargs):
@@ -201,13 +229,13 @@ class ExpedienteResource(ModelResource):
         exp = Expediente.objects.get(id=id)
         return self.create_response(request, { "success":True, "tipo":exp.tipo, "fecha_entrada": exp.fecha_entrada, "fecha_finalizacion": exp.fecha_finalizacion,
                                                "remitente": exp.remitente, "numero_folios": exp.numero_folios, "completado": exp.completado, "leido": exp.leido,
-                                               "firma": exp.firma, "aceptado": exp.aceptado, "usuario": exp.usuario.id})
+                                               "firma": exp.firma, "aceptado": exp.aceptado})
 
     def lista_finalizados(self, request, **kwargs):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
         #self.is_authorized(request)
-        data = serializers.serialize("json", Expediente.objects.filter(Q(usuario=request.user), Q(completado=1)))
+        data = serializers.serialize("json", Expediente.objects.filter(completado=1))
 
         return HttpResponse(data, content_type='application/json', status=200)
 
@@ -215,7 +243,7 @@ class ExpedienteResource(ModelResource):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
         #self.is_authorized(request)
-        data = serializers.serialize("json", Actualizacion.objects.filter(usuario=request.user))
+        data = serializers.serialize("json", Actualizacion.objects.filter(enviado=request.user.id))
 
         return HttpResponse(data, content_type='application/json', status=200)
 
@@ -223,7 +251,7 @@ class ExpedienteResource(ModelResource):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
         #self.is_authorized(request)
-        expediente = Expediente.objects.filter(Q(usuario=request.user), Q(leido=0)).count()
+        expediente = Actualizacion.objects.filter(Q(recibido=request.user.id), Q(expediente.leido=0)).count()
 
         return self.create_response(request, {'numero': expediente})
 
@@ -240,7 +268,23 @@ class ExpedienteResource(ModelResource):
 
         return self.create_response(request, { "success": True}, HttpCreated)
 
-    def autorizado(self, request, id, **kwargs):
+    def autorizar(self, request, id, **kwargs):
+        self.method_check(request, allowed=['put', 'get'])
+        self.is_authenticated(request)
+        #self.is_authorized(request)
+        #data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        #exp = data.get('id', '')
+        expediente = Expediente.objects.get(id=id)
+        expediente.completado = 1
+        expediente.save()
+
+        est = Estado(estado="Finalizado", fecha= date.today(), expediente = expediente)
+        est.save()
+
+        return self.create_response(request, {"success":True})
+
+    def aceptar(self, request, id, **kwargs):
         self.method_check(request, allowed=['put', 'get'])
         self.is_authenticated(request)
         #self.is_authorized(request)
@@ -250,6 +294,9 @@ class ExpedienteResource(ModelResource):
         expediente = Expediente.objects.get(id=id)
         expediente.aceptado = 1
         expediente.save()
+
+        est = Estado(estado="En proceso", fecha= date.today(), expediente=expediente)
+        est.save()
 
         return self.create_response(request, {"success":True}, HttpCreated)
 
@@ -383,7 +430,8 @@ class ObservacionResource(ModelResource):
 
 class ActualizacionResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')
-    usuario = fields.ForeignKey(UsuarioResource, 'usuario')
+    enviado = fields.ForeignKey(UsuarioResource, 'enviado')
+    recibido = fields.ForeignKey(UsuarioResource, 'recibido')
     class Meta:
         queryset = Actualizacion.objects.all()
         authorization = Authorization()
@@ -414,15 +462,17 @@ class ActualizacionResource(ModelResource):
         #self.is_authorized(request)
         data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
-        token = data.get('token', ' ')
+        #token = data.get('token', ' ')
         fecha_recibido = data.get('fecha_recibido', ' ')
         fecha_envio = data.get('fecha_envio', ' ')
         obs = data.get('observaciones', ' ')
-        at = AccessToken.objects.get(token=token)
+        enviado = data.get('enviado', ' ')
+        recibido = data.get('recibido', ' ')
+        #at = AccessToken.objects.get(token=token)
         expediente = Expediente.objects.get(id=id)
 
-        observacion = Observacion(fecha_recibido=fecha_recibido, fecha_envio=fecha_envio, observaciones=obs, expediente=expediente, usuario=at.user)
-        observacion.save()
+        act = Actualizacion(fecha_recibido=fecha_recibido, fecha_envio=fecha_envio, observaciones=obs, expediente=expediente, enviado=enviado, recibido=recibido)
+        act.save()
 
         return self.create_response(request, { "success": True}, HttpCreated)
 
@@ -432,7 +482,7 @@ class ActualizacionResource(ModelResource):
         #self.is_authorized(request)
 
         expediente = Expediente.objects.filter(id=id)
-        data = serializers.serialize("json", Actualizacion.objects.filter(expediente=expediente).values())
+        data = serializers.serialize("json", Actualizacion.objects.filter(expediente=expediente))
 
         return HttpResponse(data, content_type='application/json', status=200)
 
@@ -448,10 +498,10 @@ class ActualizacionResource(ModelResource):
         act.fecha_recibido = data.get('fecha_recibido', ' ')
         act.fecha_envio = data.get('fecha_envio', ' ')
         act.observaciones = data.get('observaciones', ' ')
+        act.recibido = data.get('recibido', ' ')
         act.save()
 
-        return self.create_response(request, { "success": True}, HttpCreated)
-
+        return self.create_response(request, { "success": True})
 
 class EstadoResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')

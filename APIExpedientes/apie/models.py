@@ -23,7 +23,7 @@ class Usuario(AbstractUser):
         return self.codigo
 
 class Expediente(models.Model):
-    tipo = models.CharField(max_length=1)
+    tipo = models.CharField(max_length=20)
     fecha_entrada = models.DateField(auto_now=True)
     fecha_finalizacion = models.DateField(null=True)
     remitente = models.CharField(max_length=100)
@@ -32,7 +32,7 @@ class Expediente(models.Model):
     leido = models.SmallIntegerField(default=0)
     firma = models.CharField(max_length=15)
     aceptado = models.SmallIntegerField(default=0)
-    usuario = models.ForeignKey(Usuario)
+    #usuario = models.ForeignKey(Usuario)
 
     class Meta:
         verbose_name = 'expediente'
@@ -64,7 +64,8 @@ class Actualizacion(models.Model):
     fecha_envio = models.DateTimeField()
     observaciones = models.TextField()
     expediente = models.ForeignKey(Expediente)
-    usuario = models.ForeignKey(Usuario)
+    enviado = models.SmallIntegerField(null=True)
+    recibido = models.SmallIntegerField(null=True)
 
 class Estado(models.Model):
     estado = models.CharField(max_length=10)
