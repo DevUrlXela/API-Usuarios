@@ -251,7 +251,7 @@ class ExpedienteResource(ModelResource):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
         #self.is_authorized(request)
-        expediente = Actualizacion.objects.filter(Q(recibido=request.user.id), Q(expediente.leido=0)).count()
+        expediente = Actualizacion.objects.filter(recibido=request.user.id).count()
 
         return self.create_response(request, {'numero': expediente})
 
