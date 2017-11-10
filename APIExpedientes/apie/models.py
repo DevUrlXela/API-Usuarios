@@ -64,8 +64,8 @@ class Actualizacion(models.Model):
     fecha_envio = models.DateTimeField()
     observaciones = models.TextField()
     expediente = models.ForeignKey(Expediente)
-    enviado = models.SmallIntegerField(null=True)
-    recibido = models.SmallIntegerField(null=True)
+    enviado = models.ForeignKey(Usuario, null=True, related_name="enviado")
+    recibido = models.ForeignKey(Usuario, null=True, related_name="recibido")
 
 class Estado(models.Model):
     estado = models.CharField(max_length=10)

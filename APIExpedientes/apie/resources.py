@@ -19,6 +19,7 @@ from oauth2_provider.models import AccessToken, Application
 
 from datetime import date, datetime, timedelta
 import json
+from django.core.serializers.json import DjangoJSONEncoder
 
 from models import Expediente, Requisito, Observacion, Actualizacion, Usuario, Rol, Estado
 from authentication import (OAuth20Authentication, OAuth2ScopedAuthentication)
@@ -136,7 +137,7 @@ class UsuarioResource(ModelResource):
                 access_token.save()
                 '''
 
-                return self.create_response(request, {'success': True, 'user': user.id, 'rol':user.rol, 'token':token})
+                return self.create_response(request, {'success': True, 'user': user.id, 'username': user.username, 'rol':user.rol, 'token':token})
             else:
                 return self.create_response(request, {'success': False, 'reason': 'baneado',}, HttpForbidden)
         else:
@@ -144,7 +145,7 @@ class UsuarioResource(ModelResource):
 
     def logout(self, request, **kwargs):
         self.method_check(request, allowed=['get'])
-        access_token = AccessToken.objects.get(token=token)
+        #access_token = AccessToken.objects.get(token=token)
 
         if request.user and request.user.is_authenticated():
             logout(request)
@@ -165,7 +166,6 @@ class ExpedienteResource(ModelResource):
             'tipo': ALL,
             'remitente': ALL,
             'firma': ALL,
-            'usuario': ALL,
         }
 
     def prepend_urls(self):
@@ -173,6 +173,9 @@ class ExpedienteResource(ModelResource):
             url(r"^(?P<resource_name>%s)/noleidos%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('no_leidos'), name="expediente_noleidos"),
+            url(r"^(?P<resource_name>%s)/inbox%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('inbox'), name="expediente_entrada"),
             url(r"^(?P<resource_name>%s)/crear%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('crear'), name="crear"),
@@ -210,16 +213,14 @@ class ExpedienteResource(ModelResource):
         remitente = data.get('remitente', '')
         folio = data.get('numero_folios', '')
         firma = data.get('firma', '')
-        usuario = data.get('usuario', '')
 
-        us = Usuario.objects.get(id=usuario)
-        exp = Expediente(tipo=tipo, fecha_entrada=fecha_entrada, remitente=remitente, numero_folios=folio, firma=firma, usuario=usuario)
+        exp = Expediente(tipo=tipo, fecha_entrada=fecha_entrada, remitente=remitente, numero_folios=folio, firma=firma)
         exp.save()
 
         est = Estado(estado="En espera", fecha= date.today(), expediente=exp)
         est.save()
 
-        return self.create_response(request, {"success":True}, HttpCreated)
+        return self.create_response(request, {"success":True, "id": exp.id}, HttpCreated)
 
     def informacion(self, request, id, **kwargs):
         self.method_check(request, allowed=['get', 'post'])
@@ -231,11 +232,40 @@ class ExpedienteResource(ModelResource):
                                                "remitente": exp.remitente, "numero_folios": exp.numero_folios, "completado": exp.completado, "leido": exp.leido,
                                                "firma": exp.firma, "aceptado": exp.aceptado})
 
+    def inbox(self, request, **kwargs):
+        self.method_check(request, allowed=['post'])
+        self.is_authenticated(request)
+
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        token = AccessToken.objects.get(token=data.get('token', ' '))
+        user = Usuario.objects.get(id=token.user.id)
+        obj = Actualizacion.objects.filter(recibido=user)
+
+        response_data = []
+        for o in obj:
+            d = {'id': o.expediente.id, 'enviado': o.enviado.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio}
+            response_data.append(d)
+
+        #data = serializers.serialize("json", obj, fields=('expediente_id', 'enviado__username', 'observaciones', 'fecha_envio'))
+        data = json.dumps(response_data, cls=DjangoJSONEncoder)
+
+        return HttpResponse(data, content_type='application/json', status=200)
+
     def lista_finalizados(self, request, **kwargs):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
-        #self.is_authorized(request)
-        data = serializers.serialize("json", Expediente.objects.filter(completado=1))
+
+        exp = []
+        values = Actualizacion.objects.filter(Q(recibido=request.user), Q(expediente__completado=1))
+        '''
+        if values.exists():
+            for x in values:
+                data = {'completado': x.expediente.completado}
+                exp.append(data)
+        '''
+
+        data = serializers.serialize("json", Expediente.objects.filter(id__in=values))
 
         return HttpResponse(data, content_type='application/json', status=200)
 
@@ -466,9 +496,12 @@ class ActualizacionResource(ModelResource):
         fecha_recibido = data.get('fecha_recibido', ' ')
         fecha_envio = data.get('fecha_envio', ' ')
         obs = data.get('observaciones', ' ')
-        enviado = data.get('enviado', ' ')
-        recibido = data.get('recibido', ' ')
+        ide = data.get('enviado', ' ')
+        idr = data.get('recibido', ' ')
+        print ide, idr, obs
         #at = AccessToken.objects.get(token=token)
+        enviado = Usuario.objects.get(id=ide)
+        recibido = Usuario.objects.get(id=idr)
         expediente = Expediente.objects.get(id=id)
 
         act = Actualizacion(fecha_recibido=fecha_recibido, fecha_envio=fecha_envio, observaciones=obs, expediente=expediente, enviado=enviado, recibido=recibido)
