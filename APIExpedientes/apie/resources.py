@@ -13,6 +13,7 @@ from tastypie.http import HttpUnauthorized, HttpForbidden, HttpCreated, HttpResp
 from tastypie.utils import trailing_slash
 from tastypie.constants import ALL
 from tastypie.api import Api
+from tastypie.paginator import Paginator
 from tastypie import fields
 
 from oauth2_provider.models import AccessToken, Application
@@ -46,13 +47,15 @@ class RolResource(ModelResource):
         #self.is_authorized(request)
 
         usuarios = Usuario.objects.all()
-        bundle = self.build_bundle(obj=usuarios, request=request)
-        bundle = self.full_dehydrate(bundle)
-        bundle = self.alter_detail_data_to_serialize(request, bundle)
-        #all_objects = list(Usuario.objects.all()) + list(Rol.objects.all())
-        #data = Serializer.serialize(Usuario.objects.all(), format='application/json', options=None)
+        values = []
 
-        return HttpResponse(request, bundle)
+        for u in usuarios:
+            d = {'id': u.id, 'usuario': u.username, 'rol': u.rol.nombre}
+            values.append(d)
+
+        data = json.dumps(values)
+
+        return HttpResponse(data, content_type='application/json', status=200)
 
 class UsuarioResource(ModelResource):
     rol = fields.ForeignKey(RolResource, 'rol')
@@ -160,6 +163,8 @@ class ExpedienteResource(ModelResource):
         authorization = Authorization()
         authentication = OAuth20Authentication()
         serializer = Serializer(formats=['json'])
+        limit = 1
+        paginator_class = Paginator
         resource_name = 'expediente'
         filtering = {
             'id': ALL,
@@ -201,6 +206,33 @@ class ExpedienteResource(ModelResource):
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('busqueda_rapida'), name="expediente_busqueda_rapida"),
         ]
+
+    '''
+    def get_list(self, request, **kwargs):
+        base_bundle = self.build_bundle(request=request)
+        objects = self.obj_get_list(bundle=base_bundle, **self.remove_api_resource_names(kwargs))
+        sorted_objects = self.apply_sorting(objects, options=request.GET)
+
+        if 'custom_uri' in kwargs:
+            resource_uri = kwargs['custom_uri']
+        else:
+            resource_uri = self.get_resource_uri()
+
+         paginator = self._meta.paginator_class(request.GET, sorted_objects, resource_uri=resource_uri, limit=self._meta.limit,
+                                                max_limit=self._meta.max_limit, collection_name=self._meta.collection_name)
+         to_be_serialized = paginator.page()
+
+         bundles = []
+
+         for obj in to_be_serialized[self._meta.collection_name]:
+             bundle = self.build_bundle(obj=obj, request=request)
+             bundles.append(self.full_dehydrate(bundle, for_list=True))
+
+        to_be_serialized[self._meta.collection_name] = bundles
+        to_be_serialized = self.alter_list_data_to_serialize(request, to_be_serialized)
+
+        return self.create_response(request, to_be_serialized)
+    '''
 
     def crear(self, request, **kwargs):
         self.method_check(request, allowed=['post'])
@@ -273,7 +305,7 @@ class ExpedienteResource(ModelResource):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
         #self.is_authorized(request)
-        data = serializers.serialize("json", Actualizacion.objects.filter(enviado=request.user.id))
+        data = serializers.serialize("json", Actualizacion.objects.filter(enviado=request.user))
 
         return HttpResponse(data, content_type='application/json', status=200)
 
@@ -281,7 +313,7 @@ class ExpedienteResource(ModelResource):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
         #self.is_authorized(request)
-        expediente = Actualizacion.objects.filter(recibido=request.user.id).count()
+        expediente = Actualizacion.objects.filter(recibido=request.user).count()
 
         return self.create_response(request, {'numero': expediente})
 
