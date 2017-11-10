@@ -24,7 +24,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 
 from models import Expediente, Requisito, Observacion, Actualizacion, Usuario, Rol, Estado
 from authentication import (OAuth20Authentication, OAuth2ScopedAuthentication)
-from tools import codigo, generar_clave
+from tools import codigo, generar_clave, DjangoOverRideJSONEncoder
 
 class RolResource(ModelResource):
     class Meta:
@@ -178,7 +178,7 @@ class ExpedienteResource(ModelResource):
             url(r"^(?P<resource_name>%s)/noleidos%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('no_leidos'), name="expediente_noleidos"),
-            url(r"^(?P<resource_name>%s)/inbox%s$" %
+            url(r"^(?P<resource_name>%s)/inbox/(?P<pag>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('inbox'), name="expediente_entrada"),
             url(r"^(?P<resource_name>%s)/crear%s$" %
@@ -187,10 +187,10 @@ class ExpedienteResource(ModelResource):
             url(r"^(?P<resource_name>%s)/informacion/(?P<id>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('informacion'), name="expediente_informacion"),
-            url(r"^(?P<resource_name>%s)/finalizados%s$" %
+            url(r"^(?P<resource_name>%s)/finalizados/(?P<pag>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('lista_finalizados'), name="expediente_finalizados"),
-            url(r"^(?P<resource_name>%s)/trasferidos%s$" %
+            url(r"^(?P<resource_name>%s)/trasferidos/(?P<pag>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('lista_trasferidos'), name="expediente_trasferidos"),
             url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/leido%s$' %
@@ -264,48 +264,75 @@ class ExpedienteResource(ModelResource):
                                                "remitente": exp.remitente, "numero_folios": exp.numero_folios, "completado": exp.completado, "leido": exp.leido,
                                                "firma": exp.firma, "aceptado": exp.aceptado})
 
-    def inbox(self, request, **kwargs):
-        self.method_check(request, allowed=['post'])
+    def inbox(self, request, pag, **kwargs):
+        self.method_check(request, allowed=['get'])
         self.is_authenticated(request)
 
-        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+        #data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+        t = request.META['HTTP_AUTHORIZATION']
+        t = t[7:]
 
-        token = AccessToken.objects.get(token=data.get('token', ' '))
+        token = AccessToken.objects.get(token=t)
         user = Usuario.objects.get(id=token.user.id)
         obj = Actualizacion.objects.filter(recibido=user)
 
         response_data = []
-        for o in obj:
-            d = {'id': o.expediente.id, 'enviado': o.enviado.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio}
-            response_data.append(d)
+        if obj.exists():
+            for o in obj:
+                d = {'id': o.expediente.id, 'enviado': o.enviado.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio, 'leido': o.expediente.leido}
+                response_data.append(d)
 
+        limit = 2
+        pag = int(pag)
+        response_data = response_data[limit*(pag-1):limit*pag]
         #data = serializers.serialize("json", obj, fields=('expediente_id', 'enviado__username', 'observaciones', 'fecha_envio'))
+        data = json.dumps(response_data, cls=DjangoOverRideJSONEncoder)
+
+        return HttpResponse(data, content_type='application/json', status=200)
+
+    def lista_finalizados(self, request, pag, **kwargs):
+        self.method_check(request, allowed=['get', 'post'])
+        self.is_authenticated(request)
+
+        obj = Actualizacion.objects.filter(expediente__completado=1)
+
+        response_data = []
+        if obj.exists():
+            for o in obj:
+                data = {'id':x.expediente.id, 'tipo': x.expediente.tipo, 'fecha_entrada': x.expediente.fecha_entrada, 'fecha_finalizacion':x.expediente.fecha_finalizacion,
+                        'remitente':x.expediente.remitente, 'folio': x.expediente.numero_folios}
+                response_data.append(data)
+
+        limit = 2
+        pag = int(pag)
+        response_data = response_data[limit*(pag-1):limit*pag]
+
         data = json.dumps(response_data, cls=DjangoJSONEncoder)
 
         return HttpResponse(data, content_type='application/json', status=200)
 
-    def lista_finalizados(self, request, **kwargs):
-        self.method_check(request, allowed=['get', 'post'])
-        self.is_authenticated(request)
-
-        exp = []
-        values = Actualizacion.objects.filter(Q(recibido=request.user), Q(expediente__completado=1))
-        '''
-        if values.exists():
-            for x in values:
-                data = {'completado': x.expediente.completado}
-                exp.append(data)
-        '''
-
-        data = serializers.serialize("json", Expediente.objects.filter(id__in=values))
-
-        return HttpResponse(data, content_type='application/json', status=200)
-
-    def lista_trasferidos(self,request, **kwargs):
+    def lista_trasferidos(self,request, pag, **kwargs):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
         #self.is_authorized(request)
-        data = serializers.serialize("json", Actualizacion.objects.filter(enviado=request.user))
+        t = request.META['HTTP_AUTHORIZATION']
+        t = t[7:]
+
+        token = AccessToken.objects.get(token=t)
+        user = Usuario.objects.get(id=token.user.id)
+        obj = Actualizacion.objects.filter(enviado=user)
+
+        response_data = []
+        if obj.exists():
+            for o in obj:
+                d = {'id': o.expediente.id, 'enviado': o.enviado.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio, 'leido': o.expediente.leido}
+                response_data.append(d)
+
+        limit = 2
+        pag = int(pag)
+        response_data = response_data[limit*(pag-1):limit*pag]
+        #data = serializers.serialize("json", obj, fields=('expediente_id', 'enviado__username', 'observaciones', 'fecha_envio'))
+        data = json.dumps(response_data, cls=DjangoOverRideJSONEncoder)
 
         return HttpResponse(data, content_type='application/json', status=200)
 
@@ -313,7 +340,7 @@ class ExpedienteResource(ModelResource):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
         #self.is_authorized(request)
-        expediente = Actualizacion.objects.filter(recibido=request.user).count()
+        expediente = Actualizacion.objects.filter(Q(recibido=request.user), Q(expediente__leido=0)).count()
 
         return self.create_response(request, {'numero': expediente})
 
