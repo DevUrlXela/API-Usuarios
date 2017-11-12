@@ -60,8 +60,8 @@ class Observacion(models.Model):
         verbose_name_plural = 'observaciones'
 
 class Actualizacion(models.Model):
-    fecha_recibido = models.DateTimeField()
-    fecha_envio = models.DateTimeField()
+    fecha_recibido = models.DateTimeField(null=True)
+    fecha_envio = models.DateTimeField(auto_now=True)
     observaciones = models.TextField()
     expediente = models.ForeignKey(Expediente)
     enviado = models.ForeignKey(Usuario, null=True, related_name="enviado")

@@ -9,7 +9,7 @@ from tastypie.serializers import Serializer
 from tastypie.authorization import DjangoAuthorization, ReadOnlyAuthorization, Authorization
 from tastypie.authentication import BasicAuthentication
 from tastypie.exceptions import BadRequest
-from tastypie.http import HttpUnauthorized, HttpForbidden, HttpCreated, HttpResponse
+from tastypie.http import HttpUnauthorized, HttpForbidden, HttpCreated, HttpResponse, HttpAccepted
 from tastypie.utils import trailing_slash
 from tastypie.constants import ALL
 from tastypie.api import Api
@@ -62,7 +62,7 @@ class UsuarioResource(ModelResource):
     class Meta:
         queryset = Usuario.objects.all()
         authorization = Authorization()
-        #authentication = OAuth20Authentication()
+        authentication = OAuth20Authentication()
         excludes = ['email', 'password', 'is_active', 'is_staff', 'is_superuser']
         filtering = {
             'username': ALL,
@@ -148,11 +148,10 @@ class UsuarioResource(ModelResource):
 
     def logout(self, request, **kwargs):
         self.method_check(request, allowed=['get'])
-        #access_token = AccessToken.objects.get(token=token)
 
         if request.user and request.user.is_authenticated():
             logout(request)
-            return self.create_response(request, {'success': True})
+            return self.create_response(request, {'success': True, 'mensaje': 'adios ' + request.user.username})
         else:
             return self.create_response(request, {'success': False}, HttpUnauthorized)
 
@@ -190,9 +189,9 @@ class ExpedienteResource(ModelResource):
             url(r"^(?P<resource_name>%s)/finalizados/(?P<pag>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('lista_finalizados'), name="expediente_finalizados"),
-            url(r"^(?P<resource_name>%s)/trasferidos/(?P<pag>[\d]+)%s$" %
+            url(r"^(?P<resource_name>%s)/transferidos/(?P<pag>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
-                self.wrap_view('lista_trasferidos'), name="expediente_trasferidos"),
+                self.wrap_view('lista_transferidos'), name="expediente_trasferidos"),
             url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/leido%s$' %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('leido'), name='expediente_leido'),
@@ -205,6 +204,12 @@ class ExpedienteResource(ModelResource):
             url(r"^(?P<resource_name>%s)/busqueda/(?P<id>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('busqueda_rapida'), name="expediente_busqueda_rapida"),
+            url(r"^(?P<resource_name>%s)/permiso/(?P<id>[\d]+)%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('permiso'), name="expediente_permiso"),
+            url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/confirmar%s$' %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('confirmar'), name="expediente_confirmar"),
         ]
 
     '''
@@ -237,7 +242,7 @@ class ExpedienteResource(ModelResource):
     def crear(self, request, **kwargs):
         self.method_check(request, allowed=['post'])
         self.is_authenticated(request)
-        #self.is_authorized(request)
+
         data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
         tipo = data.get('tipo', '')
@@ -254,13 +259,25 @@ class ExpedienteResource(ModelResource):
 
         return self.create_response(request, {"success":True, "id": exp.id}, HttpCreated)
 
+    def editar(self, request, id, **kwargs):
+        self.method_check(request, allowed=['put'])
+        self.is_authenticated(request)
+
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        tipo = data.get('tipo', ' ')
+        remitente = data.get('remitente', ' ')
+        folio = data.get('folio', ' ')
+        firma = data.get('firma', ' ')
+
+        exp = Expediente.objects.get(id=id)
+
     def informacion(self, request, id, **kwargs):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
-        #self.is_authorized(request)
 
         exp = Expediente.objects.get(id=id)
-        return self.create_response(request, { "success":True, "tipo":exp.tipo, "fecha_entrada": exp.fecha_entrada, "fecha_finalizacion": exp.fecha_finalizacion,
+        return self.create_response(request, { "success":True, "id":exp.id ,"tipo":exp.tipo, "fecha_entrada": exp.fecha_entrada, "fecha_finalizacion": exp.fecha_finalizacion,
                                                "remitente": exp.remitente, "numero_folios": exp.numero_folios, "completado": exp.completado, "leido": exp.leido,
                                                "firma": exp.firma, "aceptado": exp.aceptado})
 
@@ -268,7 +285,6 @@ class ExpedienteResource(ModelResource):
         self.method_check(request, allowed=['get'])
         self.is_authenticated(request)
 
-        #data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
         t = request.META['HTTP_AUTHORIZATION']
         t = t[7:]
 
@@ -276,17 +292,29 @@ class ExpedienteResource(ModelResource):
         user = Usuario.objects.get(id=token.user.id)
         obj = Actualizacion.objects.filter(recibido=user)
 
-        response_data = []
+        limit = 2
+        pags = len(obj)
+        total = 0
+
+        while pags > 0:
+            pags = pags - limit
+            total = total + 1
+
+        dd = {}
+        dd['meta'] = {}
+        dd['meta']['limit'] = 2
+        dd['meta']['total'] = total
+
+        dd['objects'] = []
         if obj.exists():
             for o in obj:
                 d = {'id': o.expediente.id, 'enviado': o.enviado.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio, 'leido': o.expediente.leido}
-                response_data.append(d)
+                dd['objects'].append(d)
 
-        limit = 2
         pag = int(pag)
-        response_data = response_data[limit*(pag-1):limit*pag]
-        #data = serializers.serialize("json", obj, fields=('expediente_id', 'enviado__username', 'observaciones', 'fecha_envio'))
-        data = json.dumps(response_data, cls=DjangoOverRideJSONEncoder)
+        dd['objects'] = dd['objects'][limit*(pag-1):limit*pag]
+
+        data = json.dumps(dd, cls=DjangoOverRideJSONEncoder)
 
         return HttpResponse(data, content_type='application/json', status=200)
 
@@ -294,27 +322,47 @@ class ExpedienteResource(ModelResource):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
 
-        obj = Actualizacion.objects.filter(expediente__completado=1)
+        t = request.META['HTTP_AUTHORIZATION']
+        t = t[7:]
 
-        response_data = []
-        if obj.exists():
-            for o in obj:
-                data = {'id':x.expediente.id, 'tipo': x.expediente.tipo, 'fecha_entrada': x.expediente.fecha_entrada, 'fecha_finalizacion':x.expediente.fecha_finalizacion,
-                        'remitente':x.expediente.remitente, 'folio': x.expediente.numero_folios}
-                response_data.append(data)
+        token = AccessToken.objects.get(token=t)
+        user = Usuario.objects.get(id=token.user.id)
 
-        limit = 2
-        pag = int(pag)
-        response_data = response_data[limit*(pag-1):limit*pag]
+        if user.rol.nombre == "Director":
+            obj = Actualizacion.objects.filter(expediente__completado=1)
 
-        data = json.dumps(response_data, cls=DjangoJSONEncoder)
+            limit = 2
+            pags = len(obj)
+            total = 0
 
-        return HttpResponse(data, content_type='application/json', status=200)
+            while pags > 0:
+                pags = pags - limit
+                total = total + 1
 
-    def lista_trasferidos(self,request, pag, **kwargs):
+            dd = {}
+            dd['meta'] = {}
+            dd['meta']['limit'] = 2
+            dd['meta']['total'] = total
+
+            dd['objects'] = []
+            if obj.exists():
+                for o in obj:
+                    d = {'id': o.expediente.id, 'enviado': o.enviado.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio, 'leido': o.expediente.leido}
+                    dd['objects'].append(d)
+
+            pag = int(pag)
+            dd['objects'] = dd['objects'][limit*(pag-1):limit*pag]
+
+            data = json.dumps(dd, cls=DjangoJSONEncoder)
+
+            return HttpResponse(data, content_type='application/json', status=200)
+
+        return self.create_response(request, {'success': False}, HttpUnauthorized)
+
+    def lista_transferidos(self,request, pag, **kwargs):
         self.method_check(request, allowed=['get', 'post'])
         self.is_authenticated(request)
-        #self.is_authorized(request)
+
         t = request.META['HTTP_AUTHORIZATION']
         t = t[7:]
 
@@ -322,17 +370,29 @@ class ExpedienteResource(ModelResource):
         user = Usuario.objects.get(id=token.user.id)
         obj = Actualizacion.objects.filter(enviado=user)
 
-        response_data = []
+        limit = 2
+        pags = len(obj)
+        total = 0
+
+        while pags > 0:
+            pags = pags - limit
+            total = total + 1
+
+        dd = {}
+        dd['meta'] = {}
+        dd['meta']['limit'] = 2
+        dd['meta']['total'] = total
+
+        dd['objects'] = []
         if obj.exists():
             for o in obj:
                 d = {'id': o.expediente.id, 'enviado': o.enviado.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio, 'leido': o.expediente.leido}
-                response_data.append(d)
+                dd['objects'].append(d)
 
-        limit = 2
         pag = int(pag)
-        response_data = response_data[limit*(pag-1):limit*pag]
-        #data = serializers.serialize("json", obj, fields=('expediente_id', 'enviado__username', 'observaciones', 'fecha_envio'))
-        data = json.dumps(response_data, cls=DjangoOverRideJSONEncoder)
+        dd['objects'] = dd['objects'][limit*(pag-1):limit*pag]
+
+        data = json.dumps(dd, cls=DjangoOverRideJSONEncoder)
 
         return HttpResponse(data, content_type='application/json', status=200)
 
@@ -366,6 +426,7 @@ class ExpedienteResource(ModelResource):
         #exp = data.get('id', '')
         expediente = Expediente.objects.get(id=id)
         expediente.completado = 1
+        expediente.fecha_finalizacion = date.today()
         expediente.save()
 
         est = Estado(estado="Finalizado", fecha= date.today(), expediente = expediente)
@@ -394,10 +455,57 @@ class ExpedienteResource(ModelResource):
         self.is_authenticated(request)
 
         exp = Expediente.objects.get(id=id)
-        est = Estado.objects.get(expediente=exp)
+        est = Estado.objects.filter(expediente=exp)
 
-        return self.create_response(request, { "estado": est.estado, "tipo": exp.tipo, "remitente": exp.remitente,
+        return self.create_response(request, { "estado": est[len(est)-1].estado, "tipo": exp.tipo, "remitente": exp.remitente,
                                                "fecha_ingreso": exp.fecha_entrada, "firma": exp.firma})
+
+    def permiso(self, request, id, **kwargs):
+        self.method_check(request, allowed=['get'])
+        self.is_authenticated(request)
+
+        t = request.META['HTTP_AUTHORIZATION']
+        t = t[7:]
+
+        token = AccessToken.objects.get(token=t)
+        user = Usuario.objects.get(id=token.user.id)
+        exp = Expediente.objects.get(id=id)
+        act = Actualizacion.objects.filter(Q(recibido=user), Q(expediente=exp))
+
+        autorizar = 0
+        aceptar = 0
+        confirmar = 0
+        modificar = 0
+        transferir = 0
+
+        if user.rol.nombre == "Director" and exp.completado != 1:
+            autorizar = 1
+
+        if act.exists():
+            modificar = 1
+            transferir = 1
+
+        if exp.aceptado != 1 and user.rol.nombre == "Director":
+            aceptar = 1
+
+        print len(act)
+        if act.exists():
+            if act[len(act)-1].fecha_recibido != None:
+                confirmar = 1
+
+        return self.create_response(request, {'autorizar': autorizar, 'aceptar':aceptar, 'confirmar_recibido': confirmar, 'modificar': modificar, 'transferir': transferir}, HttpAccepted)
+
+    def confirmar(self, request, id, **kwargs):
+        self.method_check(request, allowed=['get'])
+        self.is_authenticated(request)
+
+        exp = Expediente.objects.get(id=id)
+        act = Actualizacion.objects.filter(expediente=exp)
+
+        act[len(act)-1].fecha_recibido = datetime.now()
+        act[len(act)-1].save()
+
+        return self.create_response(request, { "success": True})
 
 class RequisitoResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')
@@ -443,16 +551,21 @@ class RequisitoResource(ModelResource):
         return self.create_response(request, { "success": True}, HttpCreated)
 
     def informacion(self, request, id, **kwargs):
-        self.method_check(request, allowed=['get', 'post'])
+        self.method_check(request, allowed=['get'])
         self.is_authenticated(request)
-        #self.is_authorized(request)
 
-        expediente = Expediente.objects.filter(id=id)
-        data = serializers.serialize("json", Requisito.objects.filter(expediente=expediente))
+        exp = Expediente.objects.filter(id=id)
+        obj = Requisito.objects.filter(expediente=exp)
+
+        dd = []
+        if obj.exists():
+            for o in obj:
+                d = {'id': o.id, 'requisito': o.requisito, 'cumplido': o.cumplido, 'expediente': o.expediente.id}
+                dd.append(d)
+
+        data = json.dumps(dd)
 
         return HttpResponse(data, content_type='application/json', status=200)
-
-        #return self.create_response(request, {"success": True, "requisito": req.requisito, "cumplido":req.cumplido, "expediente": req.expediente.id })
 
     def editar(self, request, ide, idr, **kwargs):
         self.method_check(request, allowed=['put'])
@@ -494,15 +607,19 @@ class ObservacionResource(ModelResource):
     def crear(self, request, id, **kwargs):
         self.method_check(request, allowed=['post'])
         self.is_authenticated(request)
-        #self.is_authorized(request)
+
         data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
-        token = data.get('token', ' ')
-        obs = data.get('observacion', ' ')
-        at = AccessToken.objects.get(token=token)
+        t = request.META['HTTP_AUTHORIZATION']
+        t = t[7:]
+
+        token = AccessToken.objects.get(token=t)
+        user = Usuario.objects.get(id=token.user.id)
         expediente = Expediente.objects.get(id=id)
 
-        observacion = Observacion(observacion=obs, expediente=expediente, usuario=at.user)
+        obs = data.get('observacion', ' ')
+
+        observacion = Observacion(observacion=obs, expediente=expediente, usuario=user)
         observacion.save()
 
         return self.create_response(request, { "success": True}, HttpCreated)
@@ -512,8 +629,16 @@ class ObservacionResource(ModelResource):
         self.is_authenticated(request)
         #self.is_authorized(request)
 
-        expediente = Expediente.objects.filter(id=id)
-        data = serializers.serialize("json", Observacion.objects.filter(expediente=expediente))
+        exp = Expediente.objects.filter(id=id)
+        obj = Observacion.objects.filter(expediente=exp)
+
+        dd = []
+        if obj.exists():
+            for o in obj:
+                d = {'observacion': o.observacion, 'expediente': o.expediente.id, 'usuario': o.usuario.username}
+                dd.append(d)
+
+        data = json.dumps(dd)
 
         return HttpResponse(data, content_type='application/json', status=200)
 
@@ -548,22 +673,21 @@ class ActualizacionResource(ModelResource):
     def crear(self, request, id, **kwargs):
         self.method_check(request, allowed=['post'])
         self.is_authenticated(request)
-        #self.is_authorized(request)
-        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+        
         #token = data.get('token', ' ')
-        fecha_recibido = data.get('fecha_recibido', ' ')
-        fecha_envio = data.get('fecha_envio', ' ')
+        #fecha_recibido = data.get('fecha_recibido', ' ')
+        #fecha_envio = data.get('fecha_envio', ' ')
         obs = data.get('observaciones', ' ')
         ide = data.get('enviado', ' ')
         idr = data.get('recibido', ' ')
-        print ide, idr, obs
-        #at = AccessToken.objects.get(token=token)
+
         enviado = Usuario.objects.get(id=ide)
         recibido = Usuario.objects.get(id=idr)
         expediente = Expediente.objects.get(id=id)
 
-        act = Actualizacion(fecha_recibido=fecha_recibido, fecha_envio=fecha_envio, observaciones=obs, expediente=expediente, enviado=enviado, recibido=recibido)
+        act = Actualizacion(observaciones=obs, expediente=expediente, enviado=enviado, recibido=recibido)
         act.save()
 
         return self.create_response(request, { "success": True}, HttpCreated)
@@ -573,8 +697,16 @@ class ActualizacionResource(ModelResource):
         self.is_authenticated(request)
         #self.is_authorized(request)
 
-        expediente = Expediente.objects.filter(id=id)
-        data = serializers.serialize("json", Actualizacion.objects.filter(expediente=expediente))
+        exp = Expediente.objects.filter(id=id)
+        obj = Actualizacion.objects.filter(expediente=exp)
+
+        dd = []
+        if obj.exists():
+            for o in obj:
+                d = {'fecha_recibido': o.fecha_recibido, 'fecha_envio': o.fecha_envio, 'observacion': o.observaciones, 'enviado': o.enviado.username, 'recibido': o.recibido.username}
+                dd.append(d)
+
+        data = json.dumps(dd, cls=DjangoOverRideJSONEncoder)
 
         return HttpResponse(data, content_type='application/json', status=200)
 
