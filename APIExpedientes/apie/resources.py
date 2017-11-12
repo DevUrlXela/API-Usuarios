@@ -210,6 +210,9 @@ class ExpedienteResource(ModelResource):
             url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/confirmar%s$' %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('confirmar'), name="expediente_confirmar"),
+            url(r'^(?P<resource_name>%s)/busqueda%s$' %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('busqueda'), name="expediente_busqueda"),
         ]
 
     '''
@@ -460,6 +463,26 @@ class ExpedienteResource(ModelResource):
         return self.create_response(request, { "estado": est[len(est)-1].estado, "tipo": exp.tipo, "remitente": exp.remitente,
                                                "fecha_ingreso": exp.fecha_entrada, "firma": exp.firma})
 
+    def busqueda(self, request, **kwargs):
+        self.method_check(request, allowed=['post'])
+        self.is_authenticated(request)
+
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        bus = data.get('busqueda', ' ')
+        obj = Expediente.objects.filter(tipo=bus).filter(fecha_entrada=bus).filter(fecha_finalizacion=bus).filter(remitente=bus).filter(numero_folios=bus).filter(
+                firma=bus)
+
+        dd = []
+        if obj.exists():
+            for o in obj:
+                d = {"tipo": o.tipo, "remitente": o.remitente, "fecha_ingreso": o.fecha_entrada, "firma": o.firma}
+                dd.append(d)
+
+        data = json.dumps(dd, cls=DjangoJSONEncoder)
+
+        return HttpResponse(data, content_type='application/json', status=200)
+
     def permiso(self, request, id, **kwargs):
         self.method_check(request, allowed=['get'])
         self.is_authenticated(request)
@@ -675,7 +698,7 @@ class ActualizacionResource(ModelResource):
         self.is_authenticated(request)
 
         data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
-        
+
         #token = data.get('token', ' ')
         #fecha_recibido = data.get('fecha_recibido', ' ')
         #fecha_envio = data.get('fecha_envio', ' ')
