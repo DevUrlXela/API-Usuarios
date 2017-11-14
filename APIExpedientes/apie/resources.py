@@ -183,6 +183,9 @@ class ExpedienteResource(ModelResource):
             url(r"^(?P<resource_name>%s)/crear%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('crear'), name="crear"),
+            url(r"^(?P<resource_name>%s)/(?P<id>[\d]+)/editar%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('editar'), name="expediente_editar"),
             url(r"^(?P<resource_name>%s)/informacion/(?P<id>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('informacion'), name="expediente_informacion"),
@@ -260,6 +263,16 @@ class ExpedienteResource(ModelResource):
         est = Estado(estado="En espera", fecha= date.today(), expediente=exp)
         est.save()
 
+        recibido = Usuario.objects.get(id=1)
+        t = request.META['HTTP_AUTHORIZATION']
+        t = t[7:]
+
+        token = AccessToken.objects.get(token=t)
+        enviado = Usuario.objects.get(id=token.user.id)
+
+        act = Actualizacion(observaciones="Nuevo expediente", enviado=enviado, recibido=recibido, expediente=exp)
+        act.save()
+
         return self.create_response(request, {"success":True, "id": exp.id}, HttpCreated)
 
     def editar(self, request, id, **kwargs):
@@ -274,6 +287,15 @@ class ExpedienteResource(ModelResource):
         firma = data.get('firma', ' ')
 
         exp = Expediente.objects.get(id=id)
+
+        exp.tipo = tipo
+        exp.remitente = remitente
+        exp.folio = folio
+        exp.firma = firma
+
+        exp.save()
+
+        return self.create_response(request, {"success":True, "id": exp.id}, HttpCreated)
 
     def informacion(self, request, id, **kwargs):
         self.method_check(request, allowed=['get', 'post'])
@@ -293,9 +315,9 @@ class ExpedienteResource(ModelResource):
 
         token = AccessToken.objects.get(token=t)
         user = Usuario.objects.get(id=token.user.id)
-        obj = Actualizacion.objects.filter(recibido=user)
+        obj = Actualizacion.objects.filter(Q(recibido=user), ~Q(enviado=user), Q(fecha_recibido=None))
 
-        limit = 2
+        limit = 10
         pags = len(obj)
         total = 0
 
@@ -305,7 +327,7 @@ class ExpedienteResource(ModelResource):
 
         dd = {}
         dd['meta'] = {}
-        dd['meta']['limit'] = 2
+        dd['meta']['limit'] = 10
         dd['meta']['total'] = total
 
         dd['objects'] = []
@@ -371,7 +393,7 @@ class ExpedienteResource(ModelResource):
 
         token = AccessToken.objects.get(token=t)
         user = Usuario.objects.get(id=token.user.id)
-        obj = Actualizacion.objects.filter(enviado=user)
+        obj = Actualizacion.objects.filter(Q(enviado=user), Q(fecha_recibido=None))
 
         limit = 2
         pags = len(obj)
@@ -451,6 +473,10 @@ class ExpedienteResource(ModelResource):
         est = Estado(estado="En proceso", fecha= date.today(), expediente=expediente)
         est.save()
 
+        act = Actualizacion.objects.filter(expediente=expediente)
+        act[len(act)-1].fecha_recibido = datetime.now()
+        act[len(act)-1].save()
+
         return self.create_response(request, {"success":True}, HttpCreated)
 
     def busqueda_rapida(self, request, id, **kwargs):
@@ -463,6 +489,7 @@ class ExpedienteResource(ModelResource):
         return self.create_response(request, { "estado": est[len(est)-1].estado, "tipo": exp.tipo, "remitente": exp.remitente,
                                                "fecha_ingreso": exp.fecha_entrada, "firma": exp.firma})
 
+    #CORREGIR
     def busqueda(self, request, **kwargs):
         self.method_check(request, allowed=['post'])
         self.is_authenticated(request)
@@ -712,6 +739,9 @@ class ActualizacionResource(ModelResource):
 
         act = Actualizacion(observaciones=obs, expediente=expediente, enviado=enviado, recibido=recibido)
         act.save()
+
+        exp.leido = 0
+        exp.save()
 
         return self.create_response(request, { "success": True}, HttpCreated)
 

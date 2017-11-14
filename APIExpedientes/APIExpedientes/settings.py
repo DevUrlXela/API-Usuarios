@@ -26,7 +26,7 @@ SECRET_KEY = 'vp=ci4!z_a9x6u61z6r_k1c1qpi_y4f+y5&$2cim_-f9kdu!_d'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['192.168.1.16', '127.0.0.1']
+ALLOWED_HOSTS = ['*']
 
 AUTH_USER_MODEL = 'apie.Usuario'
 # Application definition
