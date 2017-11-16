@@ -22,7 +22,7 @@ from datetime import date, datetime, timedelta
 import json
 from django.core.serializers.json import DjangoJSONEncoder
 
-from models import Expediente, Requisito, Observacion, Actualizacion, Usuario, Rol, Estado
+from models import Expediente, Requisito, Observacion, Actualizacion, Usuario, Rol, Estado, Reporte
 from authentication import (OAuth20Authentication, OAuth2ScopedAuthentication)
 from tools import codigo, generar_clave, DjangoOverRideJSONEncoder
 
@@ -100,6 +100,17 @@ class UsuarioResource(ModelResource):
         ot_access_token = AccessToken(**options)
         ot_access_token.save()
 
+        url = 'http://192.168.1.5:8000/usuarios/user/'
+
+        headers = {'Content-Type': 'application/json'}
+        data_string = json.dumps({"password":bundle.data.get('password'),"username":bundle.data.get('username'),"is_active":bundle.data.get('is_active'),"codigo":str(self.user)})
+        contenido = requests.post(url,data_string,headers=headers)
+        print(data_string)
+        if contenido.status_code == 201:
+            print(str(contenido.status_code))
+        else:
+            print("Error: "+str(contenido.status_code))
+            
         return bundle
 
     def prepend_urls(self):
@@ -826,3 +837,25 @@ class EstadoResource(ModelResource):
         data = serializers.serialize("json", Estado.objects.filter(expediente=expediente))
 
         return HttpResponse(data, content_type='application/json', status=200)
+
+class ReporteResource(ModelResource):
+    class Meta:
+        queryset = Reporte.objects.all()
+        #authorization = Authorization()
+        serializer = Serializer(formats=['json'])
+        resource_name = 'reporte'
+
+    def obj_create(self, bundle, request=None, **kwargs):
+        #bundle = super(ReporteResource, self).obj_create(bundle)
+        id_r = bundle.data.get('id')
+        fecha_inicio = bundle.data.get('fecha_inicio')
+        fecha_fin = bundle.data.get('fecha_fin')
+        remitente = bundle.data.get('remitente_r')
+        fecha_entrada = bundle.data.get('fecha_entrada_r')
+        numero_folios = bundle.data.get('numero_folios_r')
+        tipo = bundle.data.get('tipo_r')
+        completado = bundle.data.get('completado_r')
+        fecha_finalizacion = bundle.data.get('fecha_finalizacion_r')
+        print(fecha_inicio)
+        print(fecha_fin)
+        reports = Expediente.objects.all()
