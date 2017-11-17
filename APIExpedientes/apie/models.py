@@ -15,24 +15,6 @@ class Rol(models.Model):
     def __str__(self):
         return self.nombre
 
-class Reporte(models.Model):
-    fecha_inicio = models.DateField(null = True)
-    fecha_fin = models.DateField(null = True)
-    remitente_r = models.BooleanField(default=False)
-    fecha_entrada_r = models.BooleanField(default=False)
-    numero_folios_r = models.BooleanField(default=False)
-    tipo_r = models.BooleanField(default=False)
-    completado_r = models.BooleanField(default=False)
-    fecha_finalizacion_r = models.BooleanField(default=False)
-
-    class Meta:
-        verbose_name = 'reporte'
-        verbose_name_plural = 'reportes'
-
-    def __str__(self):
-        return self.reporte
-
-
 class Usuario(AbstractUser):
     codigo = models.CharField(max_length=6)
     rol = models.ForeignKey(Rol)
@@ -55,6 +37,24 @@ class Expediente(models.Model):
     class Meta:
         verbose_name = 'expediente'
         verbose_name_plural = 'expedientes'
+
+    def __unicode__(self):
+        return self.tipo
+
+    def __str__(self):
+        return self.tipo
+
+    def get(self, dato, **kwargs):
+        options = {
+            "remitente": self.remitente,
+            "tipo": self.tipo,
+            "fecha_entrada": self.fecha_entrada,
+            "fecha_finalizacion": self.fecha_finalizacion,
+            "completado": self.completado,
+            "numero_folios": self.numero_folios,
+        }
+
+        return options.get(dato)
 
 class Requisito(models.Model):
     requisito = models.CharField(max_length=100)

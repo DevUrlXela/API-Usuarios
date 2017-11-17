@@ -19,12 +19,14 @@ from tastypie import fields
 from oauth2_provider.models import AccessToken, Application
 
 from datetime import date, datetime, timedelta
-import json
 from django.core.serializers.json import DjangoJSONEncoder
 
-from models import Expediente, Requisito, Observacion, Actualizacion, Usuario, Rol, Estado, Reporte
+from models import Expediente, Requisito, Observacion, Actualizacion, Usuario, Rol, Estado
 from authentication import (OAuth20Authentication, OAuth2ScopedAuthentication)
 from tools import codigo, generar_clave, DjangoOverRideJSONEncoder, validarFecha
+
+import json
+import xlwt
 
 class RolResource(ModelResource):
     class Meta:
@@ -227,6 +229,9 @@ class ExpedienteResource(ModelResource):
             url(r'^(?P<resource_name>%s)/busqueda/(?P<pag>[\d]+)%s$' %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('busqueda'), name="expediente_busqueda"),
+            url(r"^(?P<resource_name>%s)/reporte%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('reporte'), name="expediente_reporte"),
         ]
 
     '''
@@ -588,6 +593,58 @@ class ExpedienteResource(ModelResource):
 
         return self.create_response(request, { "success": True})
 
+    def reporte(self, request, **kwargs):
+        self.method_check(request, allowed=['post'])
+        self.is_authenticated(request)
+
+        response = HttpResponse(content_type='application/ms-excel')
+        response['Content-Disposition'] = 'attachment; filename="expedientes.xls"'
+
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        fecha_inicio = data.get('fecha_inicio')
+        fecha_fin = data.get('fecha_fin')
+        remitente = data.get('remitente')
+        fecha_entrada = data.get('fecha_entrada')
+        numero_folios = data.get('numero_folios')
+        tipo = data.get('tipo')
+        completado = data.get('completado')
+        fecha_finalizacion = data.get('fecha_finalizacion')
+        estado = data.get('estado')
+
+        wb = xlwt.Workbook(encoding='utf-8')
+        ws = wb.add_sheet('Reporte')
+
+        row_num = 0
+        font_style = xlwt.XFStyle()
+        font_style.font.bold = True
+
+        titulos = ['Remitente', 'Tipo', 'Fecha de entrada', 'Fecha de finalizacion', 'Completado', 'Folio']
+        campos = ['remitente', 'tipo', 'fecha_entrada', 'fecha_finalizacion', 'completado', 'numero_folios']
+        opciones = [remitente, tipo, fecha_entrada, fecha_finalizacion, completado, numero_folios]
+        cols = []
+        fields = []
+
+        for i, op in enumerate(opciones):
+            if op == 1:
+                cols.append(titulos[i])
+                fields.append(campos[i])
+
+        for col in range(len(cols)):
+            ws.write(row_num, col, cols[col], font_style)
+
+        font_style = xlwt.XFStyle()
+
+        rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+        rows.values_list(*fields)
+        for row in rows:
+            row_num += 1
+            for col_num, elem in enumerate(fields):
+                ws.write(row_num, col_num, row.get(elem), font_style)
+
+        wb.save("prueba.xls")
+        return response
+
 class RequisitoResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')
     class Meta:
@@ -857,25 +914,3 @@ class EstadoResource(ModelResource):
         data = serializers.serialize("json", Estado.objects.filter(expediente=expediente))
 
         return HttpResponse(data, content_type='application/json', status=200)
-
-class ReporteResource(ModelResource):
-    class Meta:
-        queryset = Reporte.objects.all()
-        #authorization = Authorization()
-        serializer = Serializer(formats=['json'])
-        resource_name = 'reporte'
-
-    def obj_create(self, bundle, request=None, **kwargs):
-        #bundle = super(ReporteResource, self).obj_create(bundle)
-        id_r = bundle.data.get('id')
-        fecha_inicio = bundle.data.get('fecha_inicio')
-        fecha_fin = bundle.data.get('fecha_fin')
-        remitente = bundle.data.get('remitente_r')
-        fecha_entrada = bundle.data.get('fecha_entrada_r')
-        numero_folios = bundle.data.get('numero_folios_r')
-        tipo = bundle.data.get('tipo_r')
-        completado = bundle.data.get('completado_r')
-        fecha_finalizacion = bundle.data.get('fecha_finalizacion_r')
-        print(fecha_inicio)
-        print(fecha_fin)
-        reports = Expediente.objects.all()

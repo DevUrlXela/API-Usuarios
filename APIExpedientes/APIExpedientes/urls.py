@@ -17,7 +17,7 @@ from django.conf.urls import url, include
 from django.contrib import admin
 from tastypie.api import Api
 
-from apie.resources import ExpedienteResource, RequisitoResource, ObservacionResource, ActualizacionResource, UsuarioResource, RolResource, EstadoResource, ReporteResource
+from apie.resources import ExpedienteResource, RequisitoResource, ObservacionResource, ActualizacionResource, UsuarioResource, RolResource, EstadoResource
 
 api_ = Api(api_name="expedientes")
 api_.register(ExpedienteResource())
@@ -27,7 +27,6 @@ api_.register(ActualizacionResource())
 api_.register(UsuarioResource())
 api_.register(RolResource())
 api_.register(EstadoResource())
-api_.register(ReporteResource())
 
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
