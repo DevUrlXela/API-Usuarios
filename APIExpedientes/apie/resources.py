@@ -24,7 +24,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 
 from models import Expediente, Requisito, Observacion, Actualizacion, Usuario, Rol, Estado, Reporte
 from authentication import (OAuth20Authentication, OAuth2ScopedAuthentication)
-from tools import codigo, generar_clave, DjangoOverRideJSONEncoder
+from tools import codigo, generar_clave, DjangoOverRideJSONEncoder, validarFecha
 
 class RolResource(ModelResource):
     class Meta:
@@ -110,7 +110,7 @@ class UsuarioResource(ModelResource):
             print(str(contenido.status_code))
         else:
             print("Error: "+str(contenido.status_code))
-            
+
         return bundle
 
     def prepend_urls(self):
@@ -215,7 +215,7 @@ class ExpedienteResource(ModelResource):
             url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/aceptar%s$' %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('aceptar'), name='expediente_aceptar'),
-            url(r"^(?P<resource_name>%s)/busqueda/(?P<id>[\d]+)%s$" %
+            url(r"^(?P<resource_name>%s)/busquedarapida/(?P<id>[\d]+)%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('busqueda_rapida'), name="expediente_busqueda_rapida"),
             url(r"^(?P<resource_name>%s)/permiso/(?P<id>[\d]+)%s$" %
@@ -224,7 +224,7 @@ class ExpedienteResource(ModelResource):
             url(r'^(?P<resource_name>%s)/(?P<id>[\d]+)/confirmar%s$' %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('confirmar'), name="expediente_confirmar"),
-            url(r'^(?P<resource_name>%s)/busqueda%s$' %
+            url(r'^(?P<resource_name>%s)/busqueda/(?P<pag>[\d]+)%s$' %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('busqueda'), name="expediente_busqueda"),
         ]
@@ -500,22 +500,42 @@ class ExpedienteResource(ModelResource):
         return self.create_response(request, { "estado": est[len(est)-1].estado, "tipo": exp.tipo, "remitente": exp.remitente,
                                                "fecha_ingreso": exp.fecha_entrada, "firma": exp.firma})
 
-    #CORREGIR
-    def busqueda(self, request, **kwargs):
+    def busqueda(self, request, pag, **kwargs):
         self.method_check(request, allowed=['post'])
         self.is_authenticated(request)
 
         data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
         bus = data.get('busqueda', ' ')
-        obj = Expediente.objects.filter(tipo=bus).filter(fecha_entrada=bus).filter(fecha_finalizacion=bus).filter(remitente=bus).filter(numero_folios=bus).filter(
-                firma=bus)
 
-        dd = []
+        if validarFecha(bus):
+            obj = Expediente.objects.filter(Q(fecha_entrada=bus) | Q(fecha_finalizacion=bus))
+        else:
+            obj = Expediente.objects.filter(Q(tipo__exact=bus) | Q(remitente__exact=bus) | Q(numero_folios__exact=bus) | Q(
+                                            firma__exact=bus))
+
+        limit = 2
+        pags = len(obj)
+        total = 0
+
+        while pags > 0:
+            pags = pags - limit
+            total = total + 1
+
+        dd = {}
+        dd['meta'] = {}
+        dd['meta']['limit'] = 2
+        dd['meta']['total'] = total
+
+        dd['objects'] = []
+
         if obj.exists():
             for o in obj:
                 d = {"tipo": o.tipo, "remitente": o.remitente, "fecha_ingreso": o.fecha_entrada, "firma": o.firma}
-                dd.append(d)
+                dd['objects'].append(d)
+
+        pag = int(pag)
+        dd['objects'] = dd['objects'][limit*(pag-1):limit*pag]
 
         data = json.dumps(dd, cls=DjangoJSONEncoder)
 

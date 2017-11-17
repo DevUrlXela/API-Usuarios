@@ -1,8 +1,36 @@
 import random
 import datetime
+import time
 from django.core.serializers.json import DjangoJSONEncoder
 import decimal
 from django.utils.timezone import is_aware
+
+class DjangoOverRideJSONEncoder(DjangoJSONEncoder):
+    """
+    JSONEncoder subclass that knows how to encode date/time and decimal types.
+    """
+    def default(self, o):
+        # See "Date Time String Format" in the ECMA-262 specification.
+        if isinstance(o, datetime.datetime):
+            r = o.isoformat(' ')
+            if o.microsecond:
+                r = r[:23] + r[26:]
+            if r.endswith('+00:00'):
+                r = r[:-6]
+            return r
+        elif isinstance(o, datetime.date):
+            return o.isoformat(' ')
+        elif isinstance(o, datetime.time):
+            if is_aware(o):
+                raise ValueError("JSON can't represent timezone-aware times.")
+            r = o.isoformat(' ')
+            if o.microsecond:
+                r = r[:12]
+            return r
+        elif isinstance(o, decimal.Decimal):
+            return str(o)
+        else:
+            return super(DjangoOverRideJSONEncoder, self).default(o)
 
 def generar_clave(self):
     clave = ""
@@ -39,29 +67,17 @@ def codigo(self,id):
         cod = "EXP" + str(id)
     return cod
 
-class DjangoOverRideJSONEncoder(DjangoJSONEncoder):
+def validarFecha(fecha):
     """
-    JSONEncoder subclass that knows how to encode date/time and decimal types.
+    Funcion para validar una fecha en formato:
+        dd/mm/yyyy, dd/mm/yy, d/m/yy, dd/mm/yyyy hh:mm:ss, dd/mm/yy hh:mm:ss, d/m/yy h:m:s
     """
-    def default(self, o):
-        # See "Date Time String Format" in the ECMA-262 specification.
-        if isinstance(o, datetime.datetime):
-            r = o.isoformat(' ')
-            if o.microsecond:
-                r = r[:23] + r[26:]
-            if r.endswith('+00:00'):
-                r = r[:-6]
-            return r
-        elif isinstance(o, datetime.date):
-            return o.isoformat(' ')
-        elif isinstance(o, datetime.time):
-            if is_aware(o):
-                raise ValueError("JSON can't represent timezone-aware times.")
-            r = o.isoformat(' ')
-            if o.microsecond:
-                r = r[:12]
-            return r
-        elif isinstance(o, decimal.Decimal):
-            return str(o)
-        else:
-            return super(DjangoOverRideJSONEncoder, self).default(o)
+    for format in ['%Y-%m-%d', '%y-%m-%d', '%Y-%m-%d %H:%M:%S', '%y-%m-%d %H:%M:%S']:
+        print "simon"
+        try:
+            print "aja"
+            res = time.strptime(fecha, format)
+            print "ok"
+            return True
+        except ValueError:
+            return False
