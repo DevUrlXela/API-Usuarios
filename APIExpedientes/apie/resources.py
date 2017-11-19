@@ -28,6 +28,13 @@ from tools import codigo, generar_clave, DjangoOverRideJSONEncoder, validarFecha
 import json
 import xlwt, os, time
 
+from reportlab.platypus import (SimpleDocTemplate, PageBreak, Image, Spacer,
+Paragraph, Table, TableStyle)
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from django.conf import settings
+
 class RolResource(ModelResource):
     class Meta:
         queryset = Rol.objects.all()
@@ -232,6 +239,9 @@ class ExpedienteResource(ModelResource):
             url(r"^(?P<resource_name>%s)/reporte%s$" %
                 (self._meta.resource_name, trailing_slash()),
                 self.wrap_view('reporte'), name="expediente_reporte"),
+            url(r"^(?P<resource_name>%s)/reporte_pdf%s$" %
+                (self._meta.resource_name, trailing_slash()),
+                self.wrap_view('reporte_pdf'), name="expediente_reporte_pdf"),
         ]
 
     '''
@@ -653,10 +663,20 @@ class ExpedienteResource(ModelResource):
 
         for col in range(len(cols)):
             ws.write(row_num, col, cols[col], font_style)
+            ws.col(col).width = 7000
 
         font_style = xlwt.XFStyle()
 
-        rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+        rows = rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+        if estado == 0:
+            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+        elif estado == 1:
+            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+        elif estado == 2:
+            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+        elif estado == 3:
+            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+
         rows.values_list(*fields)
         for row in rows:
             row_num += 1
@@ -668,6 +688,91 @@ class ExpedienteResource(ModelResource):
         print nombre
         path = settings.MEDIA_ROOT + nombre
         wb.save(path)
+        url = settings.MEDIA_URL + nombre
+        return self.create_response(request, {'url': url}, status=200)
+
+    def reporte_pdf(self, request, **kwargs):
+        self.method_check(request, allowed=['post'])
+        self.is_authenticated(request)
+
+        t = request.META['HTTP_AUTHORIZATION']
+        t = t[7:]
+
+        token = AccessToken.objects.get(token=t)
+        user = Usuario.objects.get(id=token.user.id)
+
+        data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
+
+        fecha_inicio = data.get('fecha_inicio')
+        fecha_fin = data.get('fecha_fin')
+        remitente = data.get('remitente')
+        fecha_entrada = data.get('fecha_entrada')
+        numero_folios = data.get('numero_folios')
+        tipo = data.get('tipo')
+        completado = data.get('completado')
+        fecha_finalizacion = data.get('fecha_finalizacion')
+        estado = data.get('estado')
+
+        titulos = ['Remitente', 'Tipo', 'Fecha de entrada', 'Fecha de finalizacion', 'Completado', 'Folio']
+        campos = ['remitente', 'tipo', 'fecha_entrada', 'fecha_finalizacion', 'completado', 'numero_folios']
+        opciones = [remitente, tipo, fecha_entrada, fecha_finalizacion, completado, numero_folios]
+        cols = []
+        fields = []
+        datos_t = []
+        aux = []
+        datos_c = []
+
+        for i, op in enumerate(opciones):
+            if op == 1:
+                cols.append(titulos[i])
+                fields.append(campos[i])
+                datos_t.append(titulos[i])
+
+        rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+
+        if estado == 0:
+            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+        elif estado == 1:
+            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+        elif estado == 2:
+            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+        elif estado == 3:
+            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+
+        rows.values_list(*fields)
+
+        for row in rows:
+            for col_num, elem in enumerate(fields):
+                aux.append(str(row.get(elem)))
+            datos_c.append(aux)
+            aux = []
+
+        datos = []
+        datos.append(datos_t)
+
+        for dat in datos_c:
+            datos.append(dat)
+
+        fecha = datetime.now()
+        nombre = "reporte_pdf" + str(fecha.year) + str(fecha.month) + str(fecha.day) + str(fecha.hour) + str(fecha.minute) + str(fecha.second) + ".pdf"
+
+        doc = SimpleDocTemplate(nombre, pagesize = A4)
+        story=[]
+
+        t = Table(datos, colWidths=102, rowHeights=20)
+        t.setStyle([
+                ('GRID',(0,0),(-1,-1),0.5,colors.grey),
+                ('BOX',(0,0),(-1,-1),1,colors.black),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.white),
+                ])
+
+        story.append(t)
+        story.append(Spacer(0,15))
+
+        doc.build(story)
+        #os.system(nombre)
+        print(doc)
+
         url = settings.MEDIA_URL + nombre
         return self.create_response(request, {'url': url}, status=200)
 
