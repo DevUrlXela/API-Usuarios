@@ -117,6 +117,9 @@ class UsuarioResource(ModelResource):
         else:
             return self.create_response(request, {'success': False}, HttpUnauthorized)
 
+    def autorizacion(self, request, token, **kwargs):
+        
+
 class RegistroResource(ModelResource):
     usuario = fields.ForeignKey(UsuarioResource, 'usuario')
     class Meta:

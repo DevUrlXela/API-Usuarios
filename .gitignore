@@ -96,6 +96,9 @@ ENV/
 
 # mkdocs documentation
 /site
+/APIExpedientes/media/*
+/APIExpedientes/apie/migrations/*
+/APIUsuarios/api/migrations/*
 
 # mypy
 .mypy_cache/

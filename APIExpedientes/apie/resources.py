@@ -1,7 +1,7 @@
 from django.db import IntegrityError
 from django.contrib.auth import authenticate, login, logout
 from django.conf.urls import url
-from django.db.models import Q
+from django.db.models import Q, Subquery, OuterRef
 from django.core import serializers
 
 from tastypie.resources import ModelResource, Resource, ALL
@@ -26,7 +26,7 @@ from authentication import (OAuth20Authentication, OAuth2ScopedAuthentication)
 from tools import codigo, generar_clave, DjangoOverRideJSONEncoder, validarFecha
 
 import json
-import xlwt
+import xlwt, os, time
 
 class RolResource(ModelResource):
     class Meta:
@@ -331,7 +331,21 @@ class ExpedienteResource(ModelResource):
 
         token = AccessToken.objects.get(token=t)
         user = Usuario.objects.get(id=token.user.id)
-        obj = Actualizacion.objects.filter(Q(recibido=user), ~Q(enviado=user), Q(fecha_recibido=None))
+        #q1 = Actualizacion.objects.all().distinct()[:1]
+        #obj = Actualizacion.objects.filter(Q(recibido=user), ~Q(enviado=user) | Q(fecha_recibido=None)).order_by('-fecha_envio')
+        obj = Actualizacion.objects.all()
+
+        ids = []
+        res = []
+        for o in obj:
+            ids.append(o.expediente.id)
+            res.append(o.id)
+            if o.expediente.id in ids:
+                res[ids.index(o.expediente.id)] = o.id
+            else:
+                res.append(o.id)
+
+        obj = Actualizacion.objects.filter(Q(recibido=user), ~Q(enviado=user) | Q(fecha_recibido=None), Q(id__in=res)).order_by('-fecha_envio')
 
         limit = 10
         pags = len(obj)
@@ -427,7 +441,7 @@ class ExpedienteResource(ModelResource):
         dd['objects'] = []
         if obj.exists():
             for o in obj:
-                d = {'id': o.expediente.id, 'enviado': o.enviado.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio, 'leido': o.expediente.leido}
+                d = {'id': o.expediente.id, 'enviado': o.recibido.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio, 'leido': o.expediente.leido}
                 dd['objects'].append(d)
 
         pag = int(pag)
@@ -536,7 +550,7 @@ class ExpedienteResource(ModelResource):
 
         if obj.exists():
             for o in obj:
-                d = {"tipo": o.tipo, "remitente": o.remitente, "fecha_ingreso": o.fecha_entrada, "firma": o.firma}
+                d = {"id":o.id, "tipo": o.tipo, "remitente": o.remitente, "fecha_ingreso": o.fecha_entrada, "firma": o.firma}
                 dd['objects'].append(d)
 
         pag = int(pag)
@@ -594,11 +608,18 @@ class ExpedienteResource(ModelResource):
         return self.create_response(request, { "success": True})
 
     def reporte(self, request, **kwargs):
+        from django.conf import settings
         self.method_check(request, allowed=['post'])
         self.is_authenticated(request)
 
+        t = request.META['HTTP_AUTHORIZATION']
+        t = t[7:]
+
+        token = AccessToken.objects.get(token=t)
+        user = Usuario.objects.get(id=token.user.id)
+
         response = HttpResponse(content_type='application/ms-excel')
-        response['Content-Disposition'] = 'attachment; filename="expedientes.xls"'
+        response['Content-Disposition'] = 'attachment; filename=expedientes.xls'
 
         data = self.deserialize(request, request.body, format=request.META.get('CONTENT_TYPE', 'application/json'))
 
@@ -642,8 +663,13 @@ class ExpedienteResource(ModelResource):
             for col_num, elem in enumerate(fields):
                 ws.write(row_num, col_num, row.get(elem), font_style)
 
-        wb.save("prueba.xls")
-        return response
+        fecha = datetime.now()
+        nombre = "reporte" + str(fecha.year) + str(fecha.month) + str(fecha.day) + str(fecha.hour) + str(fecha.minute) + str(fecha.second) + ".xls"
+        print nombre
+        path = settings.MEDIA_ROOT + nombre
+        wb.save(path)
+        url = settings.MEDIA_URL + nombre
+        return self.create_response(request, {'url': url}, status=200)
 
 class RequisitoResource(ModelResource):
     expediente = fields.ForeignKey(ExpedienteResource, 'expediente')
@@ -828,8 +854,8 @@ class ActualizacionResource(ModelResource):
         act = Actualizacion(observaciones=obs, expediente=expediente, enviado=enviado, recibido=recibido)
         act.save()
 
-        exp.leido = 0
-        exp.save()
+        expediente.leido = 0
+        expediente.save()
 
         return self.create_response(request, { "success": True}, HttpCreated)
 

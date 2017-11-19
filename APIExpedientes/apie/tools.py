@@ -73,11 +73,11 @@ def validarFecha(fecha):
         dd/mm/yyyy, dd/mm/yy, d/m/yy, dd/mm/yyyy hh:mm:ss, dd/mm/yy hh:mm:ss, d/m/yy h:m:s
     """
     for format in ['%Y-%m-%d', '%y-%m-%d', '%Y-%m-%d %H:%M:%S', '%y-%m-%d %H:%M:%S']:
-        print "simon"
         try:
-            print "aja"
             res = time.strptime(fecha, format)
-            print "ok"
             return True
         except ValueError:
             return False
+
+def autorizacion(token):
+    pass
