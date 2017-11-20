@@ -2,9 +2,27 @@
 from __future__ import unicode_literals
 
 from django.db import models
-from django.contrib.auth.models import User, AbstractUser
+from django.contrib.auth.models import User, AbstractUser, UserManager
+
+from datetime import date, datetime
 
 # Create your models here.
+class MyUserManager(UserManager):
+    def create_user(self, username, first_name, last_name, rol, password=None):
+        if not username:
+            raise ValueError('Se necesita un nombre de usuario')
+
+        user = self.model(
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            rol=rol,
+        )
+
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
 class Rol(models.Model):
     nombre = models.CharField(max_length=15)
 
@@ -17,7 +35,13 @@ class Rol(models.Model):
 
 class Usuario(AbstractUser):
     codigo = models.CharField(max_length=6)
+    first_name = models.CharField(max_length=35)
+    last_name = models.CharField(max_length=35)
     rol = models.ForeignKey(Rol)
+
+    objects = MyUserManager()
+
+    #REQUIRED_FIELDS = ['first_name', 'last_name', 'username', 'rol']
 
     def __str__(self):
         return self.codigo

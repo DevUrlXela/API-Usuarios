@@ -3,6 +3,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.conf.urls import url
 from django.db.models import Q, Subquery, OuterRef
 from django.core import serializers
+from django.utils import timezone
 
 from tastypie.resources import ModelResource, Resource, ALL
 from tastypie.serializers import Serializer
@@ -137,25 +138,44 @@ class UsuarioResource(ModelResource):
         if user:
             if user.is_active:
                 login(request, user)
-                token = AccessToken.objects.get(user=user)
-                '''
-                token = generar_clave(self)
-                application = Application.objects.get(user=user)
 
-                options = {
-                    'user': user,
-                    'application': application,
-                    'expires': datetime.now() + timedelta(minutes=30),
-                    'token': token
-                }
+                try:
+                    application = Application.objects.get(user=user)
+                except Application.DoesNotExist:
+                    application = None
 
-                access_token = AccessToken(**options)
-                access_token.save()
-                '''
+                if application != None:
+                    token = generar_clave(self)
+                    t = AccessToken.objects.get(user=user)
+                    t.token = token
+                    t.expires = datetime.now() + timedelta(days=1)
+                    t.save()
 
-                return self.create_response(request, {'success': True, 'user': user.id, 'username': user.username, 'rol':user.rol, 'token':token})
+                    return self.create_response(request, {'success': True, 'user': user.id, 'username': user.username, 'rol':user.rol, 'token':token})
+                else:
+                    ot_application = Application(
+                        user = user,
+                        redirect_uris = 'https://127.0.0.1:8000',
+                        client_type = Application.CLIENT_CONFIDENTIAL,
+                        authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
+                        name = 'application'
+                    )
+                    ot_application.save()
+
+                    token = generar_clave(self)
+                    options = {
+                        'user': user,
+                        'application': ot_application,
+                        'expires': datetime.now() + timedelta(days=1),
+                        'token': token
+                    }
+
+                    ot_access_token = AccessToken(**options)
+                    ot_access_token.save()
+
+                    return self.create_response(request, {'success': True, 'user': user.id, 'username': user.username, 'rol':user.rol, 'token':token})
             else:
-                return self.create_response(request, {'success': False, 'reason': 'baneado',}, HttpForbidden)
+                return self.create_response(request, {'success': False, 'reason': 'Suspendido',}, HttpForbidden)
         else:
             return self.create_response(request, {'success': False, 'reason': 'incorrect', 'skip_login_redir':True}, HttpUnauthorized)
 
@@ -163,6 +183,8 @@ class UsuarioResource(ModelResource):
         self.method_check(request, allowed=['get'])
 
         if request.user and request.user.is_authenticated():
+            token = AccessToken.objects.get(user=request.user)
+            token.expires = datetime.now() + timedelta(hours=1)
             logout(request)
             return self.create_response(request, {'success': True, 'mensaje': 'adios ' + request.user.username})
         else:
@@ -384,7 +406,19 @@ class ExpedienteResource(ModelResource):
         user = Usuario.objects.get(id=token.user.id)
 
         if user.rol.nombre == "Director":
-            obj = Actualizacion.objects.filter(expediente__completado=1)
+            obj = Actualizacion.objects.all()
+
+            ids = []
+            res = []
+            for o in obj:
+                ids.append(o.expediente.id)
+                res.append(o.id)
+                if o.expediente.id in ids:
+                    res[ids.index(o.expediente.id)] = o.id
+                else:
+                    res.append(o.id)
+
+            obj = Actualizacion.objects.filter(Q(expediente__completado=1), Q(id__in=res))
 
             limit = 2
             pags = len(obj)
@@ -402,6 +436,7 @@ class ExpedienteResource(ModelResource):
             dd['objects'] = []
             if obj.exists():
                 for o in obj:
+                    print o.expediente.id
                     d = {'id': o.expediente.id, 'enviado': o.enviado.username, 'observaciones': o.observaciones, 'fecha_envio': o.fecha_envio, 'leido': o.expediente.leido}
                     dd['objects'].append(d)
 
