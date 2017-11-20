@@ -1,7 +1,7 @@
 from django.db import IntegrityError
 from django.contrib.auth import authenticate, login, logout
 from django.conf.urls import url
-from django.db.models import Q, Subquery, OuterRef
+from django.db.models import Q #, Subquery, OuterRef
 from django.core import serializers
 
 from tastypie.resources import ModelResource, Resource, ALL
@@ -71,7 +71,7 @@ class UsuarioResource(ModelResource):
     class Meta:
         queryset = Usuario.objects.all()
         authorization = Authorization()
-        authentication = OAuth20Authentication()
+        #authentication = OAuth20Authentication()
         excludes = ['email', 'password', 'is_active', 'is_staff', 'is_superuser']
         filtering = {
             'username': ALL,
@@ -642,6 +642,12 @@ class ExpedienteResource(ModelResource):
         completado = data.get('completado')
         fecha_finalizacion = data.get('fecha_finalizacion')
         estado = data.get('estado')
+        comple = 0
+        if completado == True:
+            comple = 1
+        else:
+            comple = 0
+
 
         wb = xlwt.Workbook(encoding='utf-8')
         ws = wb.add_sheet('Reporte')
@@ -667,15 +673,15 @@ class ExpedienteResource(ModelResource):
 
         font_style = xlwt.XFStyle()
 
-        rows = rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+        rows = rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
         if estado == 0:
-            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+            rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
         elif estado == 1:
-            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+            rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
         elif estado == 2:
-            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+            rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
         elif estado == 3:
-            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+            rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
 
         rows.values_list(*fields)
         for row in rows:
@@ -712,10 +718,17 @@ class ExpedienteResource(ModelResource):
         completado = data.get('completado')
         fecha_finalizacion = data.get('fecha_finalizacion')
         estado = data.get('estado')
+        comple = 0
+        if completado == True:
+            comple = 1
+        else:
+            comple = 0
 
-        titulos = ['Remitente', 'Tipo', 'Fecha de entrada', 'Fecha de finalizacion', 'Completado', 'Folio']
-        campos = ['remitente', 'tipo', 'fecha_entrada', 'fecha_finalizacion', 'completado', 'numero_folios']
-        opciones = [remitente, tipo, fecha_entrada, fecha_finalizacion, completado, numero_folios]
+        print(data)
+
+        titulos = ['Remitente', 'Tipo', 'Fecha de entrada', 'Fecha de finalizacion', 'Folio']
+        campos = ['remitente', 'tipo', 'fecha_entrada', 'fecha_finalizacion', 'numero_folios']
+        opciones = [remitente, tipo, fecha_entrada, fecha_finalizacion, numero_folios]
         cols = []
         fields = []
         datos_t = []
@@ -727,17 +740,19 @@ class ExpedienteResource(ModelResource):
                 cols.append(titulos[i])
                 fields.append(campos[i])
                 datos_t.append(titulos[i])
+                #print(fields)
+                #datos_t.append(titulos[i])
 
-        rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
-
+        rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+        print(rows)
         if estado == 0:
-            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
+            rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)))
         elif estado == 1:
-            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+            rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
         elif estado == 2:
-            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+            rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
         elif estado == 3:
-            rows = Expediente.objects.filter(Q(completado=completado), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
+            rows = Expediente.objects.filter(Q(completado=comple), Q(fecha_entrada__range=(fecha_inicio,fecha_fin)),Q(estado__estado = str(estado)))
 
         rows.values_list(*fields)
 
@@ -753,10 +768,11 @@ class ExpedienteResource(ModelResource):
         for dat in datos_c:
             datos.append(dat)
 
+        print(datos)
         fecha = datetime.now()
         nombre = "reporte_pdf" + str(fecha.year) + str(fecha.month) + str(fecha.day) + str(fecha.hour) + str(fecha.minute) + str(fecha.second) + ".pdf"
-
-        doc = SimpleDocTemplate(nombre, pagesize = A4)
+        path = settings.MEDIA_ROOT + nombre
+        doc = SimpleDocTemplate(path, pagesize = A4)
         story=[]
 
         t = Table(datos, colWidths=102, rowHeights=20)
