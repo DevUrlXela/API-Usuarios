@@ -7,6 +7,8 @@ Las dos API se encuentran en el mismo repositorio.
 
 Consulte la wiki para mayor información sobre el proyecto.
 
+[Enlace a la documentación oficial](https://github.com/andyj13/API-Usuarios/wiki/Documentaci%C3%B3n-Proyecto-Drenajes)
+
 Requerimientos
 ==============
 Django==1.11.6
