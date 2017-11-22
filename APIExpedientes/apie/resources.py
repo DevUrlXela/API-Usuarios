@@ -82,13 +82,18 @@ class UsuarioResource(ModelResource):
 
     def obj_create(self, bundle, request=None, **kwargs):
         bundle = super(UsuarioResource, self).obj_create(bundle)
+        #bundle.obj.set_username(bundle.data.get('username'))
         bundle.obj.set_password(bundle.data.get('password'))
+        #bundle.obj.set_rol(bundle.data.get('rol'))
         bundle.obj.save()
 
-        self.user = Usuario.objects.get(codigo=bundle.data.get('codigo'))
-        self.user.email = bundle.data.get('email')
+        self.user = Usuario.objects.get(username=bundle.data.get('username'))
+        self.user.username = bundle.data.get('username')
+        self.user.rol = bundle.data.get('rol')
+        self.user.is_staff = 1
+        self.user.is_admin = 1
         self.user.save()
-
+        '''
         self.token = generar_clave(self)
 
         ot_application = Application(
@@ -110,6 +115,7 @@ class UsuarioResource(ModelResource):
         ot_access_token = AccessToken(**options)
         ot_access_token.save()
 
+
         url = 'http://192.168.1.5:8000/usuarios/user/'
 
         headers = {'Content-Type': 'application/json'}
@@ -120,6 +126,7 @@ class UsuarioResource(ModelResource):
             print(str(contenido.status_code))
         else:
             print("Error: "+str(contenido.status_code))
+        '''
 
         return bundle
 
